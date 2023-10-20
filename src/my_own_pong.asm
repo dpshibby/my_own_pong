@@ -4,21 +4,21 @@
 	.segment "CHARS"
 	.incbin "pong_background.chr"
 	.incbin "pong_sprites.chr"
-	
+
 	.segment "VECTORS"
 	.addr NMI
 	.addr RESET 
 	.addr 0			; IRQ unused
 
 	.segment "ZEROPAGE"
-pointerLo:	.res 1 		; pointer vars for 2byte addr
-pointerHi:	.res 1
+pointerLo:.res 1 		; pointer vars for 2byte addr
+pointerHi:.res 1
 
 	.segment "CODE"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; NMI Handler routine ;;;
 
-NMI:	
+NMI:
 	PHP
 	PHA
 	TXA
@@ -33,9 +33,9 @@ NMI:
 	STA OAMDMA
 
 	;; needed?
-	;; LDA #%10001000		; enable NMI, bg = pattern table 0, sprites = 1
+	;; LDA #%10001000	; enable NMI, bg = pattern table 0, sprites = 1
 	;; STA PPUCTRL
-	;; LDA #%00011110		; turn screen on
+	;; LDA #%00011110	; turn screen on
 	;; STA PPUMASK
 
 	;; disable scrolling
@@ -52,14 +52,14 @@ NMI:
 	PLP
 
 	RTI
-	
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; RESET Handler routine ;;;
 
 RESET:
 	SEI 			; disable/mask interupts
 	CLD 			; disable decimal mode
-	LDX #$40
+	LDX #$40		
 	STA $4017 		; disable APU IRQ
 	LDX #$FF
 	TXS 			; set up stack addr
@@ -75,7 +75,7 @@ vblankwait1:			; wait for first vblank
 	BPL vblankwait1
 	;; end vblankwait1
 
-clear_mem:	
+clear_mem:
 	TXA			; X and A both #$00
 	STA $0000, X
 	STA $0100, X
@@ -110,7 +110,7 @@ vblankwait2:			; wait for second vblank
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; MAIN function entry point ;;;
 
-MAIN:	
+MAIN:
 	;; load palettes
 	;; create a background
 	;; load sprites
@@ -124,14 +124,14 @@ MAIN:
 	STX PPUADDR
 
 load_palette:
-	LDA default_palette, X 	; X is still #$00
+	LDA default_palette, X	; X is still #$00
 	STA PPUDATA
 	INX
 	CPX #$20
 	BNE load_palette
 	;; finished loading palettes
 
-	
+
 loadbackground:
 	LDA PPUSTATUS           ; read PPU status to reset the high/low latch
 	LDA #$20
@@ -139,28 +139,28 @@ loadbackground:
 	LDA #$00
 	STA PPUADDR             ; write low byte of $2000 address
 
-	LDA #<background 
+	LDA #<background
 	STA pointerLo           ; put the low byte of address of background into pointer
 	LDA #>background        ; #> is the same as HIGH() function in NESASM, used to get the high byte
 	STA pointerHi           ; put high byte of address into pointer
 
-	LDX #$00                ; start at pointer + 0
+	LDX #$00                ; start at pointer 0
 	LDY #$00
 outsideloop:
 
 insideloop:
-	LDA (pointerLo),Y       ; copy one background byte from address in pointer + Y
+	LDA (pointerLo),Y       ; copy one background byte from address in pointer Y
 	STA PPUDATA             ; runs 256*4 times
 
 	INY                     ; inside loop counter
-	CPY #$00                
+	CPY #$00
 	BNE insideloop          ; run inside loop 256 times before continuing
 
 	INC pointerHi           ; low byte went from 0 -> 256, so high byte needs to be changed now
 
 	INX                     ; increment outside loop counter
 	CPX #$04                ; needs to happen $04 times, to copy 1KB data
-	BNE outsideloop         
+	BNE outsideloop
 	;; initial background finished loading
 
 	;; we turn these on after loading the initial background
@@ -169,7 +169,7 @@ insideloop:
 	STA PPUCTRL
 	LDA #%00011110		; turn screen on
 	STA PPUMASK
-	
+
 	LDX #$00
 load_sprite:
 	LDA sprites, X
@@ -181,7 +181,7 @@ load_sprite:
 
 LOOP:
 	JMP LOOP
-	
+
 sprites:
 	.byte $70, $00, $00, $00
 	.byte $78, $00, $00, $00
