@@ -11,8 +11,8 @@
 	.addr 0			; IRQ unused
 
 	.segment "ZEROPAGE"
-pointerLo:.res 1 		; pointer vars for 2byte addr
-pointerHi:.res 1
+pointerLo: .res 1 		; pointer vars for 2byte addr
+pointerHi: .res 1
 
 	.segment "CODE"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -59,7 +59,7 @@ NMI:
 RESET:
 	SEI 			; disable/mask interupts
 	CLD 			; disable decimal mode
-	LDX #$40		
+	LDX #$40
 	STA $4017 		; disable APU IRQ
 	LDX #$FF
 	TXS 			; set up stack addr
