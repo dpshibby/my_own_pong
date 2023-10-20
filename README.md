@@ -8,4 +8,8 @@ improvements from there.
 
 ## Compiling
 This project uses the ca65 assembler.
-More instructions will be written later.
+For now use:
+`ca65 src/my_own_pong.asm`
+`ld65 src/my_own_pong.o -C nes.cfg -o my_pong.nes`
+
+More instructions will be written later, maybe a Makefile
