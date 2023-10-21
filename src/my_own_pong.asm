@@ -23,9 +23,9 @@ ball_speed:	.res 1
 waiting:	.res 1
 
 	;; Game specific constants
-	TOP_WALL    = $20
-	RIGHT_WALL  = $E5
-	BOTTOM_WALL = $E0
+	TOP_WALL    = $08
+	RIGHT_WALL  = $F4
+	BOTTOM_WALL = $DF
 	LEFT_WALL   = $04
 
 	BALL_START_X = $80
@@ -214,32 +214,10 @@ load_sprite:			; for now this just loads in the paddles
 	
 
 LOOP:
-move_ball_right:
 	LDA ball_left
-	BNE move_ball_right_done
-
-	LDA ball_x
-	CLC
-	ADC ball_speed
-	STA ball_x
-
-	;; check if ball is hitting right side of screen
-	LDA ball_x
-	CMP #RIGHT_WALL
-	BCC move_ball_right_done
+	BEQ move_ball_right
 	
-	LDA #$01
-	STA ball_left		; switch direction to left
-
-	;; later this should give Player 1 a point and reset ball position
-	;; but for now we'll just bounce off the walls
-
-move_ball_right_done:
-
 move_ball_left:
-	LDA ball_left
-	BEQ move_ball_left_done	; don't bother if moving right
-
 	LDA ball_x
 	SEC
 	SBC ball_speed
@@ -248,20 +226,42 @@ move_ball_left:
 	;; check if ball is hitting left side of screen
 	LDA ball_x
 	CMP #LEFT_WALL
-	BCS move_ball_left_done
+	BNE horiz_movement_done
 	
 	LDA #$00
 	STA ball_left		; switch direction to right
+	JMP horiz_movement_done
 
 	;; later this should give Player 2 a point and reset ball position
 	;; but for now we'll just bounce off the walls
 
-move_ball_left_done:
+	;; left movement done
 
-move_ball_up:
+move_ball_right:
+	LDA ball_x
+	CLC
+	ADC ball_speed
+	STA ball_x
+
+	;; check if ball is hitting right side of screen
+	LDA ball_x
+	CMP #RIGHT_WALL
+	BCC horiz_movement_done
+	
+	LDA #$01
+	STA ball_left		; switch direction to left
+	JMP horiz_movement_done
+
+	;; later this should give Player 1 a point and reset ball position
+	;; but for now we'll just bounce off the walls
+
+	;; right movement done
+
+horiz_movement_done:
+
 	LDA ball_up
-	BEQ move_ball_up_done	; don't bother if moving down
-
+	BEQ move_ball_down
+move_ball_up:
 	LDA ball_y
 	SEC
 	SBC ball_speed		; subtract since pos Y is down the screen
@@ -270,17 +270,15 @@ move_ball_up:
 	;; check if ball is hitting top of screen
 	LDA ball_y
 	CMP #TOP_WALL
-	BCS move_ball_up_done
+	BCS vert_movement_done
 
 	LDA #$00
 	STA ball_up		; switch direction to down
+	JMP vert_movement_done
 
-move_ball_up_done:
+	;; up movement done
 
 move_ball_down:
-	LDA ball_up
-	BNE move_ball_down_done
-
 	LDA ball_y
 	CLC
 	ADC ball_speed
@@ -288,13 +286,15 @@ move_ball_down:
 
 	LDA ball_y
 	CMP #BOTTOM_WALL
-	BCC move_ball_down_done
+	BCC vert_movement_done
 
 	LDA #$01
 	STA ball_up
+	JMP vert_movement_done
 
-move_ball_down_done:
-	
+	;; down movement done
+
+vert_movement_done:
 
 	;; write into sprite mem that will go to PPU in VBLANK
 	LDA ball_y
