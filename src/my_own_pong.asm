@@ -11,8 +11,23 @@
 	.addr 0			; IRQ unused
 
 	.segment "ZEROPAGE"
-pointerLo: .res 1 		; pointer vars for 2byte addr
-pointerHi: .res 1
+pointerLo: 	.res 1 		; pointer vars for 2byte addr
+pointerHi: 	.res 1
+
+ball_x:	   	.res 1
+ball_y:	   	.res 1
+ball_up:   	.res 1 		; 1 for up, 0 for down
+ball_left:	.res 1 		; 1 for left, 0 for right
+ball_speed:	.res 1
+
+	;; Game specific constants
+	TOP_WALL    = $20
+	RIGHT_WALL  = $E5
+	BOTTOM_WALL = $E0
+	LEFT_WALL   = $04
+
+	BALL_START_X = $80
+	BALL_START_Y = $50
 
 	.segment "CODE"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -173,13 +188,119 @@ insideloop:
 	LDX #$00
 load_sprite:
 	LDA sprites, X
-	STA $0200, X
+	STA $0204, X
 	INX
 	CPX #$10
 	BNE load_sprite
 	;; finished loading sprites
 
+	;; set up initial vals for ball
+	LDA #$01
+	STA ball_speed
+	STA ball_up
+	STA ball_left
+	
+	LDA #BALL_START_X
+	STA ball_x
+	LDA #BALL_START_Y
+	STA ball_y
+	
+
 LOOP:
+move_ball_right:
+	LDA ball_left
+	BNE move_ball_right_done
+
+	LDA ball_x
+	CLC
+	ADC ball_speed
+	STA ball_x
+
+	;; check if ball is hitting right side of screen
+	LDA ball_x
+	CMP #RIGHT_WALL
+	BCC move_ball_right_done
+	
+	LDA #$01
+	STA ball_left		; switch direction to left
+
+	;; later this should give Player 1 a point and reset ball position
+	;; but for now we'll just bounce off the walls
+
+move_ball_right_done:
+
+move_ball_left:
+	LDA ball_left
+	BEQ move_ball_left_done	; don't bother if moving right
+
+	LDA ball_x
+	SEC
+	SBC ball_speed
+	STA ball_x
+
+	;; check if ball is hitting left side of screen
+	LDA ball_x
+	CMP #LEFT_WALL
+	BCS move_ball_left_done
+	
+	LDA #$00
+	STA ball_left		; switch direction to right
+
+	;; later this should give Player 2 a point and reset ball position
+	;; but for now we'll just bounce off the walls
+
+move_ball_left_done:
+
+move_ball_up:
+	LDA ball_up
+	BEQ move_ball_up_done	; don't bother if moving down
+
+	LDA ball_y
+	SEC
+	SBC ball_speed		; subtract since pos Y is down the screen
+	STA ball_y
+
+	;; check if ball is hitting top of screen
+	LDA ball_y
+	CMP #TOP_WALL
+	BCS move_ball_up_done
+
+	LDA #$00
+	STA ball_up		; switch direction to down
+
+move_ball_up_done:
+
+move_ball_down:
+	LDA ball_up
+	BNE move_ball_down_done
+
+	LDA ball_y
+	CLC
+	ADC ball_speed
+	STA ball_y
+
+	LDA ball_y
+	CMP #BOTTOM_WALL
+	BCC move_ball_down_done
+
+	LDA #$01
+	STA ball_up
+
+move_ball_down_done:
+	
+
+	;; write into sprite mem that will go to PPU in VBLANK
+	LDA ball_y
+	STA $0200
+
+	LDA #$00		; sprite 0 is plain white block
+	STA $0201
+	
+	STA $0202		; A still == 0
+	
+	LDA ball_x
+	STA $0203
+	
 	JMP LOOP
 
 sprites:
