@@ -20,6 +20,8 @@ ball_up:   	.res 1 		; 1 for up, 0 for down
 ball_left:	.res 1 		; 1 for left, 0 for right
 ball_speed:	.res 1
 
+waiting:	.res 1
+
 	;; Game specific constants
 	TOP_WALL    = $20
 	RIGHT_WALL  = $E5
@@ -58,6 +60,7 @@ NMI:
 	STA PPUSCROLL
 	STA PPUSCROLL
 
+	STA waiting		; A is still 0
 
 	PLA
 	TAY
@@ -186,7 +189,7 @@ insideloop:
 	STA PPUMASK
 
 	LDX #$00
-load_sprite:
+load_sprite:			; for now this just loads in the paddles
 	LDA sprites, X
 	STA $0204, X
 	INX
@@ -204,6 +207,10 @@ load_sprite:
 	STA ball_x
 	LDA #BALL_START_Y
 	STA ball_y
+
+	;; initial val for waiting var
+	LDA #$00
+	STA waiting
 	
 
 LOOP:
@@ -300,6 +307,13 @@ move_ball_down_done:
 	
 	LDA ball_x
 	STA $0203
+
+	;; here we just spin until NMI finishes so we only do all the
+	;; actions in the main loop once per frame
+	INC waiting
+wait_loop:
+	LDA waiting
+	BNE wait_loop
 	
 	JMP LOOP
 
