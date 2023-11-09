@@ -224,7 +224,7 @@ load_sprite:			; for now this just loads in the paddles
 	STA paddle_2_y
 
 	;; set up initial vals for ball
-	LDA #$02
+	LDA #$01
 	STA ball_speed
 	STA ball_up
 	STA ball_left
@@ -440,6 +440,8 @@ ball_vert_movement_done:
 	;; check collisions on paddles
 	;; paddle 1:
 	LDA ball_x
+	SEC
+	SBC #$08
 	CMP #PADDLE_1_X
 	BCS paddle_1_collision_done
 

@@ -1,7 +1,7 @@
-1. Collisions on left paddle work but are pretty hard to actually get
-   since it just makes sure that the ball is within the paddle as it
-   tries to pass the paddle. This lets the ball go diagonally past the
-   paddle very easily.
+1. Collisions are better since if the ball is within the paddle vertically
+   while passing through it then it will count as a hit. The ball can still
+   pass through diagonally since it's not perfect rectangle collision but
+   it is much better than before.
 
 2. A lot of our CMP checks are pretty primitive. Since in one direction
    they check less than and in the other direction greater than or equal
