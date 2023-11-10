@@ -1,6 +1,6 @@
 	.segment "RODATA"
 default_palette:
-	.byte $0F, $20, $20, $20 ; bg palettes
+	.byte $0F, $2A, $20, $20 ; bg palettes
 	.byte $0F, $20, $20, $20
 	.byte $0F, $20, $20, $20
 	.byte $0F, $20, $20, $20

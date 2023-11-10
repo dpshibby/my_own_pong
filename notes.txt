@@ -1,0 +1,13 @@
+1. Collisions are better since if the ball is within the paddle vertically
+   while passing through it then it will count as a hit. The ball can still
+   pass through diagonally since it's not perfect rectangle collision but
+   it is much better than before.
+
+2. A lot of our CMP checks are pretty primitive. Since in one direction
+   they check less than and in the other direction greater than or equal
+   to, they might be slightly different depending on the direction.
+
+3. Paddle or ball speed greater than 1 can cause the object to exceed what
+   its bounds are meant to be. We should move them in a bit and/or change
+   the boundary checks to act while next movement is being calculated rather
+   than after.

@@ -1,3 +1,9 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; TODO:
+;;;       * paddle 1 movement done !!
+;;;       * get collisions on paddles
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 	.include "header.asm"
 	.include "constants.asm"
 
@@ -14,6 +20,13 @@
 pointerLo: 	.res 1 		; pointer vars for 2byte addr
 pointerHi: 	.res 1
 
+ctrl_input_1:	.res 1
+ctrl_input_2:	.res 1
+
+paddle_1_y:	.res 1
+paddle_2_y:	.res 1
+paddle_speed:	.res 1
+
 ball_x:	   	.res 1
 ball_y:	   	.res 1
 ball_up:   	.res 1 		; 1 for up, 0 for down
@@ -23,10 +36,13 @@ ball_speed:	.res 1
 waiting:	.res 1
 
 	;; Game specific constants
-	TOP_WALL    = $08
+	TOP_WALL    = $07
 	RIGHT_WALL  = $F4
-	BOTTOM_WALL = $DF
+	BOTTOM_WALL = $E7
 	LEFT_WALL   = $04
+
+	PADDLE_1_X  = $08
+	PADDLE_2_X  = $F0
 
 	BALL_START_X = $80
 	BALL_START_Y = $50
@@ -197,6 +213,16 @@ load_sprite:			; for now this just loads in the paddles
 	BNE load_sprite
 	;; finished loading sprites
 
+	;; set initial vals for paddles
+	LDA #$05
+	STA paddle_speed
+
+	LDA #$70
+	STA paddle_1_y
+
+	LDA #$70
+	STA paddle_2_y
+
 	;; set up initial vals for ball
 	LDA #$01
 	STA ball_speed
@@ -214,6 +240,117 @@ load_sprite:			; for now this just loads in the paddles
 	
 
 LOOP:
+	;; first we're gonna read the controllers
+	;; bless the guy at famicom party for this one
+	LDA #$01
+	STA CONTROLLER_1
+	STA ctrl_input_1
+	STA ctrl_input_2
+	LDA #$00
+	STA CONTROLLER_1
+
+get_buttons_1:
+	LDA CONTROLLER_1
+	LSR A
+	ROL ctrl_input_1
+	BCC get_buttons_1
+
+	;; controller 1 input processed
+
+get_buttons_2:
+	LDA CONTROLLER_2
+	LSR A
+	ROL ctrl_input_2
+	BCC get_buttons_2
+	
+	;; controller 2 input processed
+
+	;; move the paddles
+
+	LDA ctrl_input_1
+	AND #BTN_UP
+	BNE move_paddle_1_up
+	LDA ctrl_input_1
+	AND #BTN_DOWN
+	BNE move_paddle_1_down
+	JMP paddle_1_move_done
+
+move_paddle_1_up:
+	LDA paddle_1_y
+	CMP #TOP_WALL
+	BCC paddle_1_up_snap	; if touching or beyond top, snap into it
+	BEQ paddle_1_up_snap	; if touching or beyond top, snap into it
+
+	LDA paddle_1_y
+	SEC
+	SBC paddle_speed
+	STA paddle_1_y
+	JMP paddle_1_move_done
+
+
+paddle_1_up_snap:
+	LDA #TOP_WALL
+	STA paddle_1_y
+	JMP paddle_1_move_done
+	
+move_paddle_1_down:
+	LDA paddle_1_y
+	CLC			; we add 16 here, 8 to get to lower block of paddle
+	ADC #$10		; and 8 to get to bottom of sprite
+	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
+	BCS paddle_1_down_snap
+
+	LDA paddle_1_y
+	CLC
+	ADC paddle_speed
+	STA paddle_1_y
+	JMP paddle_1_move_done
+
+paddle_1_down_snap:
+	LDA #BOTTOM_WALL
+	SEC
+	SBC #$10
+	STA paddle_1_y
+	;; JMP paddle_1_move_done
+	
+paddle_1_move_done:
+
+	;; now for paddle 2
+	LDA ctrl_input_2
+	AND #BTN_UP
+	BNE move_paddle_2_up
+	LDA ctrl_input_2
+	AND #BTN_DOWN
+	BNE move_paddle_2_down
+	JMP paddle_2_move_done
+
+move_paddle_2_up:
+	LDA paddle_2_y
+	CMP #TOP_WALL
+	BCC paddle_2_move_done	; if touching top wall, don't try to move
+
+	LDA paddle_2_y
+	SEC
+	SBC paddle_speed
+	STA paddle_2_y
+	JMP paddle_2_move_done
+	
+move_paddle_2_down:
+	LDA paddle_2_y
+	CLC			; we add 16 here, 8 to get to lower block of paddle
+	ADC #$10		; and 8 to get to bottom of sprite
+	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
+	BCS paddle_2_move_done
+
+	LDA paddle_2_y
+	CLC
+	ADC paddle_speed
+	STA paddle_2_y
+	
+paddle_2_move_done:
+	
+	;; move the ball
+
 	LDA ball_left
 	BEQ move_ball_right
 	
@@ -226,16 +363,16 @@ move_ball_left:
 	;; check if ball is hitting left side of screen
 	LDA ball_x
 	CMP #LEFT_WALL
-	BNE horiz_movement_done
+	BNE ball_horiz_movement_done
 	
 	LDA #$00
 	STA ball_left		; switch direction to right
-	JMP horiz_movement_done
+	JMP ball_horiz_movement_done
 
 	;; later this should give Player 2 a point and reset ball position
 	;; but for now we'll just bounce off the walls
 
-	;; left movement done
+	;; ball left movement done
 
 move_ball_right:
 	LDA ball_x
@@ -246,18 +383,18 @@ move_ball_right:
 	;; check if ball is hitting right side of screen
 	LDA ball_x
 	CMP #RIGHT_WALL
-	BCC horiz_movement_done
+	BCC ball_horiz_movement_done
 	
 	LDA #$01
 	STA ball_left		; switch direction to left
-	JMP horiz_movement_done
+	JMP ball_horiz_movement_done
 
 	;; later this should give Player 1 a point and reset ball position
 	;; but for now we'll just bounce off the walls
 
-	;; right movement done
+	;; ball right movement done
 
-horiz_movement_done:
+ball_horiz_movement_done:
 
 	LDA ball_up
 	BEQ move_ball_down
@@ -270,13 +407,15 @@ move_ball_up:
 	;; check if ball is hitting top of screen
 	LDA ball_y
 	CMP #TOP_WALL
-	BCS vert_movement_done
-
+	BEQ ball_switch
+	BCS ball_vert_movement_done
+	
+ball_switch:
 	LDA #$00
 	STA ball_up		; switch direction to down
-	JMP vert_movement_done
+	JMP ball_vert_movement_done
 
-	;; up movement done
+	;; ball up movement done
 
 move_ball_down:
 	LDA ball_y
@@ -285,18 +424,68 @@ move_ball_down:
 	STA ball_y
 
 	LDA ball_y
+	CLC
+	ADC #08			; get to bottom of ball sprite
 	CMP #BOTTOM_WALL
-	BCC vert_movement_done
+	BCC ball_vert_movement_done
 
 	LDA #$01
 	STA ball_up
-	JMP vert_movement_done
+	JMP ball_vert_movement_done
 
-	;; down movement done
+	;; ball down movement done
 
-vert_movement_done:
+ball_vert_movement_done:
 
+	;; check collisions on paddles
+	;; paddle 1:
+	LDA ball_x
+	SEC
+	SBC #$08
+	CMP #PADDLE_1_X
+	BCS paddle_1_collision_done
+
+	LDA ball_y
+	CMP paddle_1_y
+	BCC paddle_1_collision_done
+
+	;; here we take ball_y and subtract 8 from it and compare it to
+	;; the paddle_1_y, this is the same as comparing ball_y to
+	;; the bottom portion of the paddle since we don't actually
+	;; use a variable to keep that value
+	LDA ball_y
+	SEC
+	SBC #$08
+	CMP paddle_1_y
+	BCS paddle_1_collision_done
+
+	LDA #$00
+	STA ball_left
+
+paddle_1_collision_done:
+
+	;; paddle 2:
+	LDA ball_x
+	CMP #PADDLE_2_X
+	BCC paddle_2_collision_done
+
+	LDA ball_y
+	CMP paddle_2_y
+	BCC paddle_2_collision_done
+
+	LDA ball_y
+	CLC
+	ADC #$10
+	CMP paddle_2_y
+	BCS paddle_2_collision_done
+
+	LDA #$01
+	STA ball_left
+
+paddle_2_collision_done:
+	
 	;; write into sprite mem that will go to PPU in VBLANK
+	
 	LDA ball_y
 	STA $0200
 
@@ -307,6 +496,64 @@ vert_movement_done:
 	
 	LDA ball_x
 	STA $0203
+
+	;; ball finished
+	;; start paddles
+	
+	LDA paddle_1_y
+	STA $0204
+
+	LDA #$00
+	STA $0205
+
+	STA $0206
+
+	;; don't think this is necessary because X doesn't change
+	LDA #PADDLE_1_X
+	STA $0207
+
+	;; paddle 1, lower block
+	LDA paddle_1_y
+	CLC
+	ADC #$08
+	STA $0208
+
+	LDA #$00
+	STA $0209
+
+	STA $020A
+
+	;; don't think this is necessary because X doesn't change
+	LDA #PADDLE_1_X
+	STA $020B
+	;; paddle 1 done
+
+	LDA paddle_2_y
+	STA $020C
+
+	LDA #$00
+	STA $020D
+
+	STA $020E
+
+	;; don't think this is necessary because X doesn't change
+	LDA #PADDLE_2_X
+	STA $020F
+
+	;; paddle 2, lower block
+	LDA paddle_2_y
+	CLC
+	ADC #$08
+	STA $0210
+
+	LDA #$00
+	STA $0211
+
+	STA $0212
+
+	;; don't think this is necessary because X doesn't change
+	LDA #PADDLE_2_X
+	STA $0213
 
 	;; here we just spin until NMI finishes so we only do all the
 	;; actions in the main loop once per frame
