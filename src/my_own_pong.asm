@@ -1,8 +1,8 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; TODO:
 ;;;       * paddle 1 movement done !!
 ;;;       * get collisions on paddles
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 	.include "header.asm"
 	.include "constants.asm"
@@ -33,7 +33,20 @@ ball_up:   	.res 1 		; 1 for up, 0 for down
 ball_left:	.res 1 		; 1 for left, 0 for right
 ball_speed:	.res 1
 
+cursor_y:	.res 1
+cursor_up:	.res 1
+
+frame_counter:	.res 1
+gen_counter:	.res 1
+anim_speed:	.res 1
+
 waiting:	.res 1
+need_nmt:	.res 1
+nmt_len:	.res 1
+
+	.segment "BSS"
+nmt_buffer:	.res 256
+palette_buffer:	.res 32
 
 	;; Game specific constants
 	TOP_WALL    = $07
@@ -65,11 +78,37 @@ NMI:
 	LDA #$02
 	STA OAMDMA
 
-	;; needed?
-	;; LDA #%10001000	; enable NMI, bg = pattern table 0, sprites = 1
-	;; STA PPUCTRL
-	;; LDA #%00011110	; turn screen on
-	;; STA PPUMASK
+	INC frame_counter
+
+	LDA need_nmt
+	BEQ no_nmt
+	;; do the nmt update thing
+	LDX #$00
+nmt_update_loop:
+	LDY nmt_buffer, X
+	BEQ nmt_update_finish
+	INX
+	LDA PPUSTATUS
+	LDA nmt_buffer, X
+	STA PPUADDR
+	INX
+	LDA nmt_buffer, X
+	STA PPUADDR
+	INX
+nmt_update_data_loop:
+	LDA nmt_buffer, X
+	INX
+	STA PPUDATA
+	DEY
+	BEQ nmt_update_loop
+	JMP nmt_update_data_loop
+
+nmt_update_finish:
+	LDA #$00
+	STA need_nmt
+	STA nmt_len
+no_nmt:
+
 
 	;; disable scrolling
 	LDA #$00
@@ -109,8 +148,8 @@ vblankwait1:			; wait for first vblank
 	BPL vblankwait1
 	;; end vblankwait1
 
-clear_mem:
 	TXA			; X and A both #$00
+clear_mem:
 	STA $0000, X
 	STA $0100, X
 	STA $0200, X
@@ -142,11 +181,48 @@ vblankwait2:			; wait for second vblank
 	JMP MAIN
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; MAIN function subroutines ;;;
+
+GET_PLAYER_INPUT:
+	LDA #$01
+	STA CONTROLLER_1
+	STA ctrl_input_1
+	STA ctrl_input_2
+	LDA #$00
+	STA CONTROLLER_1
+
+get_buttons_1:
+	LDA CONTROLLER_1
+	LSR A
+	ROL ctrl_input_1
+	BCC get_buttons_1
+
+	;; controller 1 input processed
+
+get_buttons_2:
+	LDA CONTROLLER_2
+	LSR A
+	ROL ctrl_input_2
+	BCC get_buttons_2
+	
+	;; controller 2 input processed
+
+	RTS
+
+	;; we wait here until NMI returns
+WAIT_FRAME:
+	INC waiting
+wait_loop:
+	LDA waiting
+	BNE wait_loop
+	RTS
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; MAIN function entry point ;;;
 
 MAIN:
 	;; load palettes
-	;; create a background
+	;; load title screen background
 	;; load sprites
 
 	.include "default_palette.asm"
@@ -183,7 +259,7 @@ loadbackground:
 outsideloop:
 
 insideloop:
-	LDA (pointerLo),Y       ; copy one background byte from address in pointer Y
+	LDA (pointerLo), Y      ; copy one background byte from address in pointer Y
 	STA PPUDATA             ; runs 256*4 times
 
 	INY                     ; inside loop counter
@@ -203,15 +279,6 @@ insideloop:
 	STA PPUCTRL
 	LDA #%00011110		; turn screen on
 	STA PPUMASK
-
-	LDX #$00
-load_sprite:			; for now this just loads in the paddles
-	LDA sprites, X
-	STA $0204, X
-	INX
-	CPX #$10
-	BNE load_sprite
-	;; finished loading sprites
 
 	;; set initial vals for paddles
 	LDA #$05
@@ -234,37 +301,27 @@ load_sprite:			; for now this just loads in the paddles
 	LDA #BALL_START_Y
 	STA ball_y
 
-	;; initial val for waiting var
+
+	;; initialize values
 	LDA #$00
 	STA waiting
-	
+	STA need_nmt
+	STA nmt_len
+	STA frame_counter
+	STA gen_counter
+	LDA #$20
+	STA anim_speed
+	LDA #$AF
+	STA cursor_y
+
+	JMP TITLE_SCREEN
+	.include "title_screen.asm"
 
 LOOP:
-	;; first we're gonna read the controllers
-	;; bless the guy at famicom party for this one
-	LDA #$01
-	STA CONTROLLER_1
-	STA ctrl_input_1
-	STA ctrl_input_2
-	LDA #$00
-	STA CONTROLLER_1
+	;; JMP TEST_JMP
 
-get_buttons_1:
-	LDA CONTROLLER_1
-	LSR A
-	ROL ctrl_input_1
-	BCC get_buttons_1
-
-	;; controller 1 input processed
-
-get_buttons_2:
-	LDA CONTROLLER_2
-	LSR A
-	ROL ctrl_input_2
-	BCC get_buttons_2
+	JSR GET_PLAYER_INPUT
 	
-	;; controller 2 input processed
-
 	;; move the paddles
 
 	LDA ctrl_input_1
@@ -555,13 +612,10 @@ paddle_2_collision_done:
 	LDA #PADDLE_2_X
 	STA $0213
 
+TEST_JMP:
 	;; here we just spin until NMI finishes so we only do all the
 	;; actions in the main loop once per frame
-	INC waiting
-wait_loop:
-	LDA waiting
-	BNE wait_loop
-	
+	JSR WAIT_FRAME
 	JMP LOOP
 
 sprites:
@@ -571,8 +625,8 @@ sprites:
 	.byte $78, $00, $00, $F8
 
 background:
-	.byte $01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01
-	.byte $01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01 ; row 1
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 1
 
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 2
@@ -607,17 +661,18 @@ background:
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 12
 
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 13
+	;; write MY OWN on this line ;;;;;;;
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$1C,$28,$00
+	.byte $1E,$26,$1D,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 13
 
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 14
 
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 15
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$60,$61,$62,$63
+	.byte $64,$65,$66,$67,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 15
 
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 16
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$70,$71,$72,$73
+	.byte $74,$75,$76,$77,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 16
 
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 17
@@ -632,7 +687,7 @@ background:
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 20
 
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 21
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 24
 
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 22
@@ -640,8 +695,8 @@ background:
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 23
 
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 24
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$1F,$21,$14,$22,$22,$00
+	.byte $00,$22,$23,$10,$21,$23,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 24
 
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 25
@@ -658,8 +713,9 @@ background:
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 29
 
-	.byte $01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01
-	.byte $01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01 ; row 30
+
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 30
 
 	;; attributes are all blank to start with since we just use black and white
 attributes:  ; 8 x 8 = 64 bytes
