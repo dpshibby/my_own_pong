@@ -1,7 +1,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; TODO:
-;;;       * paddle 1 movement done !!
-;;;       * get collisions on paddles
+;;;       * movement for both paddles done, now should refine collisions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 	.include "header.asm"
@@ -19,6 +18,9 @@
 	.segment "ZEROPAGE"
 pointerLo: 	.res 1 		; pointer vars for 2byte addr
 pointerHi: 	.res 1
+
+p1_score:	.res 1
+p2_score:	.res 1
 
 ctrl_input_1:	.res 1
 ctrl_input_2:	.res 1
@@ -376,17 +378,7 @@ move_ball_left:
 	SBC ball_speed
 	STA ball_x
 
-	;; check if ball is hitting left side of screen
-	LDA ball_x
-	CMP #LEFT_WALL
-	BNE ball_horiz_movement_done
-	
-	LDA #$00
-	STA ball_left		; switch direction to right
 	JMP ball_horiz_movement_done
-
-	;; later this should give Player 2 a point and reset ball position
-	;; but for now we'll just bounce off the walls
 
 	;; ball left movement done
 
@@ -396,17 +388,7 @@ move_ball_right:
 	ADC ball_speed
 	STA ball_x
 
-	;; check if ball is hitting right side of screen
-	LDA ball_x
-	CMP #RIGHT_WALL
-	BCC ball_horiz_movement_done
-	
-	LDA #$01
-	STA ball_left		; switch direction to left
-	JMP ball_horiz_movement_done
-
-	;; later this should give Player 1 a point and reset ball position
-	;; but for now we'll just bounce off the walls
+	;; JMP ball_horiz_movement_done
 
 	;; ball right movement done
 
@@ -441,7 +423,7 @@ move_ball_down:
 
 	LDA ball_y
 	CLC
-	ADC #08			; get to bottom of ball sprite
+	ADC #$08		; get to bottom of ball sprite
 	CMP #BOTTOM_WALL
 	BCC ball_vert_movement_done
 
@@ -462,16 +444,19 @@ ball_vert_movement_done:
 	BCS paddle_1_collision_done
 
 	LDA ball_y
+	CLC
+	ADC #$08
 	CMP paddle_1_y
+	BEQ paddle_1_collision_done
 	BCC paddle_1_collision_done
 
-	;; here we take ball_y and subtract 8 from it and compare it to
+	;; here we take ball_y and subtract 16 from it and compare it to
 	;; the paddle_1_y, this is the same as comparing ball_y to
 	;; the bottom portion of the paddle since we don't actually
 	;; use a variable to keep that value
 	LDA ball_y
 	SEC
-	SBC #$08
+	SBC #$10
 	CMP paddle_1_y
 	BCS paddle_1_collision_done
 
@@ -482,16 +467,26 @@ paddle_1_collision_done:
 
 	;; paddle 2:
 	LDA ball_x
+	CLC
+	ADC #$08
 	CMP #PADDLE_2_X
-	BCC paddle_2_collision_done
-
-	LDA ball_y
-	CMP paddle_2_y
+	BEQ paddle_2_collision_done
 	BCC paddle_2_collision_done
 
 	LDA ball_y
 	CLC
-	ADC #$10
+	ADC #$08
+	CMP paddle_2_y
+	BEQ paddle_2_collision_done
+	BCC paddle_2_collision_done
+
+	;; here we take ball_y and subtract 16 from it and compare it to
+	;; the paddle_2_y, this is the same as comparing ball_y to
+	;; the bottom portion of the paddle since we don't actually
+	;; use a variable to keep that value
+	LDA ball_y
+	SEC
+	SBC #$10
 	CMP paddle_2_y
 	BCS paddle_2_collision_done
 
