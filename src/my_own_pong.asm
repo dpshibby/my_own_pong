@@ -267,6 +267,7 @@ get_buttons_2:
 
 	;; move the paddles
 
+	;; start of player 1 movement
 	LDA ctrl_input_1
 	AND #BTN_UP
 	BNE move_paddle_1_up
@@ -277,13 +278,10 @@ get_buttons_2:
 
 move_paddle_1_up:
 	LDA paddle_1_y
-	CMP #TOP_WALL
-	BCC paddle_1_up_snap	; if touching or beyond top, snap into it
-	BEQ paddle_1_up_snap	; if touching or beyond top, snap into it
-
-	LDA paddle_1_y
 	SEC
 	SBC paddle_speed
+	CMP #TOP_WALL
+	BCC paddle_1_up_snap	; if touching or beyond top, snap into it
 	STA paddle_1_y
 	JMP paddle_1_move_done
 
@@ -292,6 +290,8 @@ paddle_1_up_snap:
 	LDA #TOP_WALL
 	STA paddle_1_y
 	JMP paddle_1_move_done
+
+	;; end of moving up section
 	
 move_paddle_1_down:
 	LDA paddle_1_y
@@ -304,6 +304,10 @@ move_paddle_1_down:
 	CLC
 	ADC paddle_speed
 	STA paddle_1_y
+	CLC			; we add 16 here, 8 to get to lower block of paddle
+	ADC #$10		; and 8 to get to bottom of sprite
+	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
+	BCS paddle_1_down_snap
 	JMP paddle_1_move_done
 
 paddle_1_down_snap:
@@ -326,26 +330,38 @@ paddle_1_move_done:
 
 move_paddle_2_up:
 	LDA paddle_2_y
-	CMP #TOP_WALL
-	BCC paddle_2_move_done	; if touching top wall, don't try to move
-
-	LDA paddle_2_y
 	SEC
 	SBC paddle_speed
+	CMP #TOP_WALL
+	BCC paddle_2_up_snap	; if touching or beyond top, snap into it
 	STA paddle_2_y
 	JMP paddle_2_move_done
+
+
+paddle_2_up_snap:
+	LDA #TOP_WALL
+	STA paddle_2_y
+	JMP paddle_2_move_done
+
+	;; end of moving up section
 	
 move_paddle_2_down:
-	LDA paddle_2_y
-	CLC			; we add 16 here, 8 to get to lower block of paddle
-	ADC #$10		; and 8 to get to bottom of sprite
-	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
-	BCS paddle_2_move_done
-
 	LDA paddle_2_y
 	CLC
 	ADC paddle_speed
 	STA paddle_2_y
+	CLC			; we add 16 here, 8 to get to lower block of paddle
+	ADC #$10		; and 8 to get to bottom of sprite
+	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
+	BCS paddle_2_down_snap
+	JMP paddle_2_move_done
+
+paddle_2_down_snap:
+	LDA #BOTTOM_WALL
+	SEC
+	SBC #$10
+	STA paddle_2_y
+	;; JMP paddle_2_move_done
 	
 paddle_2_move_done:
 	
