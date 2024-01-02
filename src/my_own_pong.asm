@@ -1,8 +1,3 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; TODO:
-;;;       * movement for both paddles done, now should refine collisions
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 	.include "header.asm"
 	.include "constants.asm"
 
@@ -19,8 +14,11 @@
 pointerLo: 	.res 1 		; pointer vars for 2byte addr
 pointerHi: 	.res 1
 
-p1_score:	.res 1
-p2_score:	.res 1
+p1_score_MSB:	.res 1
+p1_score_LSB:	.res 1
+p2_score_MSB:	.res 1
+p2_score_LSB:	.res 1
+serving:	.res 1		; 0 for p1, 1 for p2
 
 ctrl_input_1:	.res 1
 ctrl_input_2:	.res 1
@@ -193,139 +191,19 @@ GET_PLAYER_INPUT:
 	LDA #$00
 	STA CONTROLLER_1
 
-get_buttons_1:
-	LDA CONTROLLER_1
-	LSR A
-	ROL ctrl_input_1
-	BCC get_buttons_1
-
-	;; controller 1 input processed
-
-get_buttons_2:
-	LDA CONTROLLER_2
-	LSR A
-	ROL ctrl_input_2
-	BCC get_buttons_2
+get_buttons:
+ 	LDA CONTROLLER_1
+ 	LSR A
+ 	ROL ctrl_input_1
+ 	LDA CONTROLLER_2
+ 	LSR A
+ 	ROL ctrl_input_2
 	
-	;; controller 2 input processed
-
+ 	BCC get_buttons
+	
 	RTS
 
-	;; we wait here until NMI returns
-WAIT_FRAME:
-	INC waiting
-wait_loop:
-	LDA waiting
-	BNE wait_loop
-	RTS
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; MAIN function entry point ;;;
-
-MAIN:
-	;; load palettes
-	;; load title screen background
-	;; load sprites
-
-	.include "default_palette.asm"
-
-	LDX PPUSTATUS
-	LDX #$3F
-	STX PPUADDR
-	LDX #$00
-	STX PPUADDR
-
-load_palette:
-	LDA default_palette, X	; X is still #$00
-	STA PPUDATA
-	INX
-	CPX #$20
-	BNE load_palette
-	;; finished loading palettes
-
-
-loadbackground:
-	LDA PPUSTATUS           ; read PPU status to reset the high/low latch
-	LDA #$20
-	STA PPUADDR             ; write high byte of $2000 address
-	LDA #$00
-	STA PPUADDR             ; write low byte of $2000 address
-
-	LDA #<background
-	STA pointerLo           ; put the low byte of address of background into pointer
-	LDA #>background        ; #> is the same as HIGH() function in NESASM, used to get the high byte
-	STA pointerHi           ; put high byte of address into pointer
-
-	LDX #$00                ; start at pointer 0
-	LDY #$00
-outsideloop:
-
-insideloop:
-	LDA (pointerLo), Y      ; copy one background byte from address in pointer Y
-	STA PPUDATA             ; runs 256*4 times
-
-	INY                     ; inside loop counter
-	CPY #$00
-	BNE insideloop          ; run inside loop 256 times before continuing
-
-	INC pointerHi           ; low byte went from 0 -> 256, so high byte needs to be changed now
-
-	INX                     ; increment outside loop counter
-	CPX #$04                ; needs to happen $04 times, to copy 1KB data
-	BNE outsideloop
-	;; initial background finished loading
-
-	;; we turn these on after loading the initial background
-	;; because it's big and causes weird glitch otherwise :)
-	LDA #%10001000		; enable NMI, bg = pattern table 0, sprites = 1
-	STA PPUCTRL
-	LDA #%00011110		; turn screen on
-	STA PPUMASK
-
-	;; set initial vals for paddles
-	LDA #$05
-	STA paddle_speed
-
-	LDA #$70
-	STA paddle_1_y
-
-	LDA #$70
-	STA paddle_2_y
-
-	;; set up initial vals for ball
-	LDA #$01
-	STA ball_speed
-	STA ball_up
-	STA ball_left
-	
-	LDA #BALL_START_X
-	STA ball_x
-	LDA #BALL_START_Y
-	STA ball_y
-
-
-	;; initialize values
-	LDA #$00
-	STA waiting
-	STA need_nmt
-	STA nmt_len
-	STA frame_counter
-	STA gen_counter
-	LDA #$20
-	STA anim_speed
-	LDA #$AF
-	STA cursor_y
-
-	JMP TITLE_SCREEN
-	.include "title_screen.asm"
-
-LOOP:
-	;; JMP TEST_JMP
-
-	JSR GET_PLAYER_INPUT
-	
-	;; move the paddles
-
+MOVE_PADDLES:
 	;; start of player 1 movement
 	LDA ctrl_input_1
 	AND #BTN_UP
@@ -423,6 +301,265 @@ paddle_2_down_snap:
 	;; JMP paddle_2_move_done
 	
 paddle_2_move_done:
+	RTS
+
+
+	;; Draws the scoreboard at the top of the screen
+DRAW_SCORE:
+	LDY nmt_len
+	LDA #$05
+	STA nmt_buffer, Y
+	INY
+	LDA #$20
+	STA nmt_buffer, Y
+	INY
+	LDA #$07
+	STA nmt_buffer, Y
+	INY
+	LDA #$1F		; P
+	STA nmt_buffer, Y
+	INY
+	LDA #$41		; 1
+	STA nmt_buffer, Y
+	INY
+	LDA #$01		; space
+	STA nmt_buffer, Y
+	INY
+
+	
+	LDA p1_score_MSB
+	CLC
+	ADC #$40		; MSB of score
+	STA nmt_buffer, Y
+	INY
+
+	LDA p1_score_LSB
+	CLC
+	ADC #$40		; LSB of score
+	STA nmt_buffer, Y
+	INY
+
+	LDA #$05
+	STA nmt_buffer, Y
+	INY
+	LDA #$20
+	STA nmt_buffer, Y
+	INY
+	LDA #$14
+	STA nmt_buffer, Y
+	INY
+	LDA #$1F		; P
+	STA nmt_buffer, Y
+	INY
+	LDA #$42		; 2
+	STA nmt_buffer, Y
+	INY
+	LDA #$01		; space
+	STA nmt_buffer, Y
+	INY
+
+	LDA p2_score_MSB
+	CLC
+	ADC #$40		; MSB of score
+	STA nmt_buffer, Y
+	INY
+
+	LDA p2_score_LSB
+	CLC
+	ADC #$40		; LSB of score
+	STA nmt_buffer, Y
+	INY
+	
+	LDA #$00
+	STA nmt_buffer, Y
+	INY
+	STY nmt_len
+	
+	LDA #$01
+	STA need_nmt
+
+	RTS
+
+	;; we wait here until NMI returns
+WAIT_FRAME:
+	INC waiting
+wait_loop:
+	LDA waiting
+	BNE wait_loop
+	RTS
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; MAIN function entry point ;;;
+
+MAIN:
+	;; load palettes
+	;; load title screen background
+	;; load sprites
+
+	.include "default_palette.asm"
+
+	LDX PPUSTATUS
+	LDX #$3F
+	STX PPUADDR
+	LDX #$00
+	STX PPUADDR
+
+load_palette:
+	LDA default_palette, X	; X is still #$00
+	STA PPUDATA
+	INX
+	CPX #$20
+	BNE load_palette
+	;; finished loading palettes
+
+
+loadbackground:
+	LDA PPUSTATUS           ; read PPU status to reset the high/low latch
+	LDA #$20
+	STA PPUADDR             ; write high byte of $2000 address
+	LDA #$00
+	STA PPUADDR             ; write low byte of $2000 address
+
+	LDA #<background
+	STA pointerLo           ; put the low byte of address of background into pointer
+	LDA #>background        ; #> is the same as HIGH() function in NESASM, used to get the high byte
+	STA pointerHi           ; put high byte of address into pointer
+
+	LDX #$00                ; start at pointer 0
+	LDY #$00
+outsideloop:
+
+insideloop:
+	LDA (pointerLo), Y      ; copy one background byte from address in pointer Y
+	STA PPUDATA             ; runs 256*4 times
+
+	INY                     ; inside loop counter
+	CPY #$00
+	BNE insideloop          ; run inside loop 256 times before continuing
+
+	INC pointerHi           ; low byte went from 0 -> 256, so high byte needs to be changed now
+
+	INX                     ; increment outside loop counter
+	CPX #$04                ; needs to happen $04 times, to copy 1KB data
+	BNE outsideloop
+	;; initial background finished loading
+
+	
+
+	;; we turn these on after loading the initial background
+	;; because it's big and causes weird glitch otherwise :)
+	LDA #%10001000		; enable NMI, bg = pattern table 0, sprites = 1
+	STA PPUCTRL
+	LDA #%00011110		; turn screen on
+	STA PPUMASK
+
+	;; set initial vals for paddles
+	LDA #$03
+	STA paddle_speed
+
+	LDA #$70
+	STA paddle_1_y
+
+	LDA #$70
+	STA paddle_2_y
+
+	;; set up initial vals for ball
+	LDA #$01
+	STA ball_speed
+	STA ball_up
+	STA ball_left
+	
+	LDA #BALL_START_X
+	STA ball_x
+	LDA #BALL_START_Y
+	STA ball_y
+
+
+	;; initialize values
+	LDA #$00
+	STA waiting
+	STA need_nmt
+	STA nmt_len
+	STA frame_counter
+	STA gen_counter
+	STA p1_score_MSB
+	STA p1_score_LSB
+	STA p2_score_MSB
+	STA p2_score_LSB
+	STA serving
+	LDA #$20
+	STA anim_speed
+	LDA #$AF
+	STA cursor_y
+
+	JMP TITLE_SCREEN
+	.include "title_screen.asm"
+
+GAME_START:
+	;; draw the scoreboard here then begin the game
+	JSR DRAW_SCORE
+	JSR WAIT_FRAME
+	JSR WAIT_FRAME
+	JSR WAIT_FRAME
+	
+SERVE:
+	JSR GET_PLAYER_INPUT
+	
+	;; move the paddles
+	JSR MOVE_PADDLES
+
+	;; keep the ball on the one serving
+	LDA serving
+	BNE p2_serve
+	LDA paddle_1_y
+	CLC
+	ADC #$04
+	STA ball_y
+
+	LDA #PADDLE_1_X
+	CLC
+	ADC #$0A
+	STA ball_x
+
+	;; now check if the player pressed A to serve
+	LDA ctrl_input_1
+	AND #BTN_A
+	BEQ serve_done
+	LDA #$00
+	STA ball_up
+	STA ball_left
+	
+	JMP GAME
+
+p2_serve:
+	LDA paddle_2_y
+	CLC
+	ADC #$04
+	STA ball_y
+
+	LDA #PADDLE_2_X
+	SEC
+	SBC #$0A
+	STA ball_x
+
+	;; now check if the player pressed A to serve
+	LDA ctrl_input_2
+	AND #BTN_A
+	BEQ serve_done
+	LDA #$01
+	STA ball_up
+	STA ball_left
+	JMP GAME
+
+serve_done:
+	JSR COMMON_END
+	JMP SERVE
+	
+GAME:
+	JSR GET_PLAYER_INPUT
+
+	;; move the paddles
+	JSR MOVE_PADDLES
 	
 	;; move the ball
 
@@ -492,6 +629,49 @@ move_ball_down:
 
 ball_vert_movement_done:
 
+	;; check if someone scores
+	LDA ball_x
+	CMP #LEFT_WALL
+	BCC player_2_score
+	BEQ player_2_score
+
+	CLC
+	ADC #$08		; get right side of ball
+	CMP #RIGHT_WALL
+	BCC score_check_done
+player_1_score:
+	INC p1_score_LSB
+	LDA p1_score_LSB
+	CMP #$0A
+	BNE p2_serve_setup
+	INC p1_score_MSB
+	LDA #$00
+	STA p1_score_LSB
+
+p2_serve_setup:
+	LDA #$01
+	STA serving
+	JSR DRAW_SCORE
+	JMP SERVE
+	
+player_2_score:
+	INC p2_score_LSB
+	LDA p2_score_LSB
+	CMP #$0A
+	BNE p1_serve
+	INC p2_score_MSB
+	LDA #$00
+	STA p2_score_LSB
+
+p1_serve:
+	LDA #$00
+	STA serving
+	JSR DRAW_SCORE
+	JMP SERVE
+
+score_check_done:
+
+	
 	;; check collisions on paddles
 	;; paddle 1:
 	LDA ball_x
@@ -551,6 +731,11 @@ paddle_1_collision_done:
 	STA ball_left
 
 paddle_2_collision_done:
+
+	JSR COMMON_END
+	JMP GAME
+
+COMMON_END:
 	
 	;; write into sprite mem that will go to PPU in VBLANK
 	
@@ -623,11 +808,11 @@ paddle_2_collision_done:
 	LDA #PADDLE_2_X
 	STA $0213
 
-TEST_JMP:
 	;; here we just spin until NMI finishes so we only do all the
 	;; actions in the main loop once per frame
 	JSR WAIT_FRAME
-	JMP LOOP
+	RTS
+	;; JMP LOOP
 
 sprites:
 	.byte $70, $00, $00, $00
@@ -730,11 +915,11 @@ background:
 
 	;; attributes are all blank to start with since we just use black and white
 attributes:  ; 8 x 8 = 64 bytes
+	.byte %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101
 	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
 	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
 	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
 	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
 	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
 	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
+	.byte %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101
