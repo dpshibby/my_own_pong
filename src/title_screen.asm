@@ -348,7 +348,14 @@ move_down:
 	STA cursor_y
 	JMP end_title_menu
 
+open_options:
+	;; later on this will open the Options submenu but for now it just
+	;; passes control back to the title menu (ignores button presses on
+	;; Options)
 
+	JMP end_title_menu
+options_menu_loop:	
+	
 option_select:
 	;; open submenu or start the game depending on choice
 	LDA cursor_y
@@ -369,22 +376,71 @@ option_select:
 	JSR STRIKEOUT
 
 	;; these erase "my own pong"
-	LDA #$21
-	LDY #$8D
+	LDA #$8D
+	LDY #$21
 	LDX #$06
 	JSR STRIKEOUT
 
-	LDA #$21
-	LDY #$CC
+	LDA #$CC
+	LDY #$21
 	LDX #$08
 	JSR STRIKEOUT
 
-	LDA #$21
-	LDY #$EC
+	LDA #$EC
+	LDY #$21
 	LDX #$08
 	JSR STRIKEOUT
 
-	LDY nmt_len
+	;; draw a gray boundary at top of screen
+ 	LDY nmt_len
+ 	LDA #$20
+ 	STA nmt_buffer, Y
+ 	INY
+ 	TAX
+ 	STA nmt_buffer, Y
+ 	INY
+ 	LDA #$00
+ 	STA nmt_buffer, Y
+ 	INY
+
+ 	LDA #$01		; gray square
+top_line_loop:
+ 	STA nmt_buffer, Y
+ 	INY
+ 	DEX
+ 	BNE top_line_loop
+
+	LDA #$00
+	STA nmt_buffer, Y
+	INY
+	STY nmt_len
+
+	LDA #$01
+	STA need_nmt
+
+	JSR WAIT_FRAME
+
+	;; draw a gray boundary at bottom of screen
+ 	LDY nmt_len
+ 	LDA #$20
+ 	STA nmt_buffer, Y
+ 	INY
+ 	TAX
+	LDA #$23
+ 	STA nmt_buffer, Y
+ 	INY
+ 	LDA #$A0
+ 	STA nmt_buffer, Y
+ 	INY
+
+ 	LDA #$01		; gray square
+bot_line_loop:
+ 	STA nmt_buffer, Y
+ 	INY
+ 	DEX
+ 	BNE bot_line_loop
+	
+	;; LDY nmt_len
 	LDA #$00
 	STA nmt_buffer, Y
 	INY
@@ -393,17 +449,14 @@ option_select:
 	LDA #$01
 	STA need_nmt
 	
+	;; these are a bit silly but just waste a bit of time so that the
+	;; A press to start the game doesn't also instantly serve the ball
 	JSR WAIT_FRAME
-	JMP LOOP
-	
-open_options:
-	;; later on this will open the Options submenu but for now it just
-	;; passes control back to the title menu (ignores button presses on
-	;; Options)
-
-	JMP end_title_menu
-options_menu_loop:	
-	
+	JSR WAIT_FRAME
+	JSR WAIT_FRAME
+	JSR WAIT_FRAME
+	JSR WAIT_FRAME
+	JMP GAME_START
 
 end_title_menu:
 	;; now draw cursor sprite
