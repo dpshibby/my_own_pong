@@ -1,18 +1,18 @@
 	;; Title Screen constants
-	PS_MSB    = $22
-	PS_LSB    = $EA
-	PS_SIZE   = $0C
+	PS_MSB        = $22
+	PS_LSB        = $EA
+	PS_SIZE       = $0C
 
-	PLAY_MSB  = $22
-	PLAY_LSB  = $CF
-	PLAY_SIZE = $04
+	PLAY_MSB      = $22
+	PLAY_LSB      = $CF
+	PLAY_SIZE     = $04
 
-	OPT_MSB   = $23
-	OPT_LSB   = $2F
-	OPT_SIZE  = $07
+	OPT_MSB       = $23
+	OPT_LSB       = $2F
+	OPT_SIZE      = $07
 
-	BALL_SPD_MSB = $22
-	BALL_SPD_LSB = $CF
+	BALL_SPD_MSB  = $22
+	BALL_SPD_LSB  = $CF
 	BALL_SPD_SIZE = $CF
 
 	CURSOR_X  = $68
@@ -74,7 +74,8 @@ DRAW_PRESS_START:
 	STY nmt_len
 
 	RTS
-	
+;;; END OF DRAW_PRESS_START ;;;
+
 
 DRAW_OPTIONS:
 	;; write "PLAY"
@@ -134,7 +135,7 @@ DRAW_OPTIONS:
 	INY
 
 	STY nmt_len
-	
+
 	;; erase "PRESS  START"
 	LDA #PS_LSB
 	LDY #PS_MSB
@@ -142,6 +143,7 @@ DRAW_OPTIONS:
 	JSR STRIKEOUT
 
 	RTS
+;;; END OF DRAW_OPTIONS ;;;
 
 DRAW_SUBMENU:
 	LDY nmt_len
@@ -179,8 +181,9 @@ DRAW_SUBMENU:
 	STY nmt_len
 
 	RTS
-	
-	
+;;; END OF DRAW_SUBMENU ;;;
+
+
 	;; STRIKEOUT assumes addr in A(low) and Y(high) and len in X
 STRIKEOUT:			; draw X black squares
 	PHA			; LSB to stack
@@ -202,9 +205,10 @@ strike_loop:
 	INY
 	DEX
 	BNE strike_loop
-		
+
 	STY nmt_len
 	RTS
+;;; END OF STRIKEOUT ;;;
 
 PRESS_START_ANIM:
 	LDA frame_counter
@@ -228,8 +232,11 @@ press_start_anim_end:
 	INY
 
 	RTS
-	
+;;; END PRESS_START_ANIM ;;;
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; TITLE_SCREEN entry point ;;;
 
 TITLE_SCREEN:
 	JSR GET_PLAYER_INPUT
@@ -261,7 +268,7 @@ start_loop:
 
 	LDA #$20
 	STA anim_speed
-	
+
 begin_title_menu:
 	;; draw Play and Options after return from routine
 	JSR DRAW_OPTIONS
@@ -330,11 +337,11 @@ back_to_title:
 	STA $0200
 	LDA #$AF
 	STA cursor_y
-	
+
 	;; signal need to update background during NMI
 	LDA #$01
 	STA need_nmt
-	
+
 	JSR WAIT_FRAME
 	JMP TITLE_SCREEN
 
@@ -354,15 +361,15 @@ open_options:
 	;; Options)
 
 	JMP end_title_menu
-options_menu_loop:	
-	
+options_menu_loop:
+
 option_select:
 	;; open submenu or start the game depending on choice
 	LDA cursor_y
 	CMP #$C7
-	BEQ open_options ; this is for opening the options menu but for
-                         ; now does nothing
-	
+	BEQ open_options	; this is for opening the options menu but for
+				; now does nothing
+
 
 	;; start the game already!
 	LDA #PLAY_LSB
@@ -392,23 +399,23 @@ option_select:
 	JSR STRIKEOUT
 
 	;; draw a gray boundary at top of screen
- 	LDY nmt_len
- 	LDA #$20
- 	STA nmt_buffer, Y
- 	INY
- 	TAX
- 	STA nmt_buffer, Y
- 	INY
- 	LDA #$00
- 	STA nmt_buffer, Y
- 	INY
+	LDY nmt_len
+	LDA #$20
+	STA nmt_buffer, Y
+	INY
+	TAX
+	STA nmt_buffer, Y
+	INY
+	LDA #$00
+	STA nmt_buffer, Y
+	INY
 
- 	LDA #$01		; gray square
+	LDA #$01		; gray square
 top_line_loop:
- 	STA nmt_buffer, Y
- 	INY
- 	DEX
- 	BNE top_line_loop
+	STA nmt_buffer, Y
+	INY
+	DEX
+	BNE top_line_loop
 
 	LDA #$00
 	STA nmt_buffer, Y
@@ -421,25 +428,25 @@ top_line_loop:
 	JSR WAIT_FRAME
 
 	;; draw a gray boundary at bottom of screen
- 	LDY nmt_len
- 	LDA #$20
- 	STA nmt_buffer, Y
- 	INY
- 	TAX
+	LDY nmt_len
+	LDA #$20
+	STA nmt_buffer, Y
+	INY
+	TAX
 	LDA #$23
- 	STA nmt_buffer, Y
- 	INY
- 	LDA #$A0
- 	STA nmt_buffer, Y
- 	INY
+	STA nmt_buffer, Y
+	INY
+	LDA #$A0
+	STA nmt_buffer, Y
+	INY
 
- 	LDA #$01		; gray square
+	LDA #$01		; gray square
 bot_line_loop:
- 	STA nmt_buffer, Y
- 	INY
- 	DEX
- 	BNE bot_line_loop
-	
+	STA nmt_buffer, Y
+	INY
+	DEX
+	BNE bot_line_loop
+
 	;; LDY nmt_len
 	LDA #$00
 	STA nmt_buffer, Y
@@ -448,7 +455,7 @@ bot_line_loop:
 
 	LDA #$01
 	STA need_nmt
-	
+
 	;; these are a bit silly but just waste a bit of time so that the
 	;; A press to start the game doesn't also instantly serve the ball
 	JSR WAIT_FRAME
@@ -468,9 +475,6 @@ end_title_menu:
 	STA $0202
 	LDA #CURSOR_X
 	STA $0203
-	
+
 	JSR WAIT_FRAME
 	JMP TITLE_MENU
-
-
-	

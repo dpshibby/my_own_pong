@@ -7,12 +7,12 @@
 
 	.segment "VECTORS"
 	.addr NMI
-	.addr RESET 
-	.addr 0			; IRQ unused
+	.addr RESET
+	.addr 0		; IRQ unused
 
 	.segment "ZEROPAGE"
-pointerLo: 	.res 1 		; pointer vars for 2byte addr
-pointerHi: 	.res 1
+pointerLo:	.res 1		; pointer vars for 2byte addr
+pointerHi:	.res 1
 
 p1_score_MSB:	.res 1
 p1_score_LSB:	.res 1
@@ -27,10 +27,10 @@ paddle_1_y:	.res 1
 paddle_2_y:	.res 1
 paddle_speed:	.res 1
 
-ball_x:	   	.res 1
-ball_y:	   	.res 1
-ball_up:   	.res 1 		; 1 for up, 0 for down
-ball_left:	.res 1 		; 1 for left, 0 for right
+ball_x:		.res 1
+ball_y:		.res 1
+ball_up:	.res 1		; 1 for up, 0 for down
+ball_left:	.res 1		; 1 for left, 0 for right
 ball_speed:	.res 1
 
 cursor_y:	.res 1
@@ -49,13 +49,13 @@ nmt_buffer:	.res 256
 palette_buffer:	.res 32
 
 	;; Game specific constants
-	TOP_WALL    = $07
-	RIGHT_WALL  = $F4
-	BOTTOM_WALL = $E7
-	LEFT_WALL   = $04
+	TOP_WALL     = $07
+	RIGHT_WALL   = $F4
+	BOTTOM_WALL  = $E7
+	LEFT_WALL    = $04
 
-	PADDLE_1_X  = $08
-	PADDLE_2_X  = $F0
+	PADDLE_1_X   = $08
+	PADDLE_2_X   = $F0
 
 	BALL_START_X = $80
 	BALL_START_Y = $50
@@ -130,14 +130,14 @@ no_nmt:
 ;;; RESET Handler routine ;;;
 
 RESET:
-	SEI 			; disable/mask interupts
-	CLD 			; disable decimal mode
+	SEI			; disable/mask interupts
+	CLD			; disable decimal mode
 	LDX #$40
-	STA $4017 		; disable APU IRQ
+	STA $4017		; disable APU IRQ
 	LDX #$FF
-	TXS 			; set up stack addr
+	TXS			; set up stack addr
 	INX
-	STX PPUCTRL 		; disable NMI during startup
+	STX PPUCTRL		; disable NMI during startup
 	STX PPUMASK		; disable rendering
 	STX $4010		; diable DMC IRQ
 	STX $4015		; disable APU sound
@@ -164,7 +164,7 @@ clear_mem:
 
 	LDA #$FF
 clear_oam:
-	STA $0200, X		; moves all garbage data in sprite mem off screen
+	STA $0200, X		; move all data in sprite mem off screen
 	INX
 	INX
 	INX
@@ -192,17 +192,19 @@ GET_PLAYER_INPUT:
 	STA CONTROLLER_1
 
 get_buttons:
- 	LDA CONTROLLER_1
- 	LSR A
- 	ROL ctrl_input_1
- 	LDA CONTROLLER_2
- 	LSR A
- 	ROL ctrl_input_2
-	
- 	BCC get_buttons
-	
-	RTS
+	LDA CONTROLLER_1
+	LSR A
+	ROL ctrl_input_1
+	LDA CONTROLLER_2
+	LSR A
+	ROL ctrl_input_2
 
+	BCC get_buttons
+
+	RTS
+;;; END OF GET_PLAYER_INPUT ;;;
+
+	;; move the paddles based on controller input
 MOVE_PADDLES:
 	;; start of player 1 movement
 	LDA ctrl_input_1
@@ -229,20 +231,14 @@ paddle_1_up_snap:
 	JMP paddle_1_move_done
 
 	;; end of moving up section
-	
-move_paddle_1_down:
-	LDA paddle_1_y
-	CLC			; we add 16 here, 8 to get to lower block of paddle
-	ADC #$10		; and 8 to get to bottom of sprite
-	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
-	BCS paddle_1_down_snap
 
+move_paddle_1_down:
 	LDA paddle_1_y
 	CLC
 	ADC paddle_speed
 	STA paddle_1_y
-	CLC			; we add 16 here, 8 to get to lower block of paddle
-	ADC #$10		; and 8 to get to bottom of sprite
+	CLC			; we add 16 here, 8 to get to lower block of
+	ADC #$10		; the paddle and 8 to get to bottom of sprite
 	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
 	BCS paddle_1_down_snap
 	JMP paddle_1_move_done
@@ -253,7 +249,7 @@ paddle_1_down_snap:
 	SBC #$10
 	STA paddle_1_y
 	;; JMP paddle_1_move_done
-	
+
 paddle_1_move_done:
 
 	;; now for paddle 2
@@ -281,14 +277,14 @@ paddle_2_up_snap:
 	JMP paddle_2_move_done
 
 	;; end of moving up section
-	
+
 move_paddle_2_down:
 	LDA paddle_2_y
 	CLC
 	ADC paddle_speed
 	STA paddle_2_y
-	CLC			; we add 16 here, 8 to get to lower block of paddle
-	ADC #$10		; and 8 to get to bottom of sprite
+	CLC			; we add 16 here, 8 to get to lower block of
+	ADC #$10		; the paddle and 8 to get to bottom of sprite
 	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
 	BCS paddle_2_down_snap
 	JMP paddle_2_move_done
@@ -299,9 +295,10 @@ paddle_2_down_snap:
 	SBC #$10
 	STA paddle_2_y
 	;; JMP paddle_2_move_done
-	
+
 paddle_2_move_done:
 	RTS
+;;; END OF MOVE_PADDLES ;;;
 
 
 	;; Draws the scoreboard at the top of the screen
@@ -326,7 +323,7 @@ DRAW_SCORE:
 	STA nmt_buffer, Y
 	INY
 
-	
+
 	LDA p1_score_MSB
 	CLC
 	ADC #$40		; MSB of score
@@ -369,16 +366,17 @@ DRAW_SCORE:
 	ADC #$40		; LSB of score
 	STA nmt_buffer, Y
 	INY
-	
+
 	LDA #$00
 	STA nmt_buffer, Y
 	INY
 	STY nmt_len
-	
+
 	LDA #$01
 	STA need_nmt
 
 	RTS
+;;; END OF DRAW_SCORE ;;;
 
 	;; we wait here until NMI returns
 WAIT_FRAME:
@@ -387,6 +385,7 @@ wait_loop:
 	LDA waiting
 	BNE wait_loop
 	RTS
+;;; END OF WAIT_FRAME ;;;
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; MAIN function entry point ;;;
@@ -414,37 +413,37 @@ load_palette:
 
 
 loadbackground:
-	LDA PPUSTATUS           ; read PPU status to reset the high/low latch
+	LDA PPUSTATUS		; read PPU status to reset the high/low latch
 	LDA #$20
-	STA PPUADDR             ; write high byte of $2000 address
+	STA PPUADDR		; write high byte of $2000 address
 	LDA #$00
-	STA PPUADDR             ; write low byte of $2000 address
+	STA PPUADDR		; write low byte of $2000 address
 
-	LDA #<background
-	STA pointerLo           ; put the low byte of address of background into pointer
-	LDA #>background        ; #> is the same as HIGH() function in NESASM, used to get the high byte
-	STA pointerHi           ; put high byte of address into pointer
+	LDA #<background	; #< gets the LSB of given addr
+	STA pointerLo		; put LSB of background addr into pointerLo
+	LDA #>background	; #> gets the MSB of given addr
+	STA pointerHi		; put MSB of background addr into pointerHi
 
-	LDX #$00                ; start at pointer 0
+	LDX #$00		; start at pointer 0
 	LDY #$00
 outsideloop:
 
 insideloop:
-	LDA (pointerLo), Y      ; copy one background byte from address in pointer Y
-	STA PPUDATA             ; runs 256*4 times
+	LDA (pointerLo), Y	; copy one byte from pointer, offset by Y
+	STA PPUDATA		; runs 256*4 times
 
-	INY                     ; inside loop counter
+	INY			; inside loop counter
 	CPY #$00
-	BNE insideloop          ; run inside loop 256 times before continuing
+	BNE insideloop		; run inside loop 256 times before continuing
 
-	INC pointerHi           ; low byte went from 0 -> 256, so high byte needs to be changed now
+	INC pointerHi		; low byte wraps so increment MSB
 
-	INX                     ; increment outside loop counter
-	CPX #$04                ; needs to happen $04 times, to copy 1KB data
+	INX			; increment outside loop counter
+	CPX #$04		; needs to happen $04 times, to copy 1KB data
 	BNE outsideloop
 	;; initial background finished loading
 
-	
+
 
 	;; we turn these on after loading the initial background
 	;; because it's big and causes weird glitch otherwise :)
@@ -468,7 +467,7 @@ insideloop:
 	STA ball_speed
 	STA ball_up
 	STA ball_left
-	
+
 	LDA #BALL_START_X
 	STA ball_x
 	LDA #BALL_START_Y
@@ -501,10 +500,10 @@ GAME_START:
 	JSR WAIT_FRAME
 	JSR WAIT_FRAME
 	JSR WAIT_FRAME
-	
+
 SERVE:
 	JSR GET_PLAYER_INPUT
-	
+
 	;; move the paddles
 	JSR MOVE_PADDLES
 
@@ -528,7 +527,7 @@ SERVE:
 	LDA #$00
 	STA ball_up
 	STA ball_left
-	
+
 	JMP GAME
 
 p2_serve:
@@ -554,18 +553,18 @@ p2_serve:
 serve_done:
 	JSR COMMON_END
 	JMP SERVE
-	
+
 GAME:
 	JSR GET_PLAYER_INPUT
 
 	;; move the paddles
 	JSR MOVE_PADDLES
-	
+
 	;; move the ball
 
 	LDA ball_left
 	BEQ move_ball_right
-	
+
 move_ball_left:
 	LDA ball_x
 	SEC
@@ -601,7 +600,7 @@ move_ball_up:
 	CMP #TOP_WALL
 	BEQ ball_switch
 	BCS ball_vert_movement_done
-	
+
 ball_switch:
 	LDA #$00
 	STA ball_up		; switch direction to down
@@ -653,7 +652,7 @@ p2_serve_setup:
 	STA serving
 	JSR DRAW_SCORE
 	JMP SERVE
-	
+
 player_2_score:
 	INC p2_score_LSB
 	LDA p2_score_LSB
@@ -671,7 +670,7 @@ p1_serve:
 
 score_check_done:
 
-	
+
 	;; check collisions on paddles
 	;; paddle 1:
 	LDA ball_x
@@ -735,24 +734,26 @@ paddle_2_collision_done:
 	JSR COMMON_END
 	JMP GAME
 
+	;; Handle all the sprite drawing for each frame
+	;; then burn cycles until next frame
 COMMON_END:
-	
+
 	;; write into sprite mem that will go to PPU in VBLANK
-	
+
 	LDA ball_y
 	STA $0200
 
 	LDA #$00		; sprite 0 is plain white block
 	STA $0201
-	
+
 	STA $0202		; A still == 0
-	
+
 	LDA ball_x
 	STA $0203
 
 	;; ball finished
 	;; start paddles
-	
+
 	LDA paddle_1_y
 	STA $0204
 
@@ -812,7 +813,7 @@ COMMON_END:
 	;; actions in the main loop once per frame
 	JSR WAIT_FRAME
 	RTS
-	;; JMP LOOP
+;;; END OF DRAW_SCORE ;;;
 
 sprites:
 	.byte $70, $00, $00, $00
@@ -821,105 +822,151 @@ sprites:
 	.byte $78, $00, $00, $F8
 
 background:
+	;; row 1
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 1
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 2
 
+	;; row 2
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 3
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 4
 
+	;; row 3
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 5
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 6
 
+	;; row 4
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 7
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 8
 
+	;; row 5
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 9
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 10
 
+	;; row 6
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 11
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 12
 
+	;; row 7
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 8
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 9
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 10
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 11
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 12
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 13
 	;; write MY OWN on this line ;;;;;;;
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$1C,$28,$00
-	.byte $1E,$26,$1D,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 13
+	.byte $1E,$26,$1D,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
+	;; row 14
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 14
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
+	;; row 15
+	;; rows 15 and 16 have the Pong logo for title screen
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$60,$61,$62,$63
-	.byte $64,$65,$66,$67,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 15
+	.byte $64,$65,$66,$67,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
+	;; row 16
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$70,$71,$72,$73
-	.byte $74,$75,$76,$77,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 16
+	.byte $74,$75,$76,$77,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
+	;; row 17
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 17
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 18
 
+	;; row 18
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 19
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 20
 
+	;; row 19
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 24
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 22
 
+	;; row 20
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 23
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
+	;; row 21
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 22
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 23
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 24
+	;; this row says "Press	 Start
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$1F,$21,$14,$22,$22,$00
-	.byte $00,$22,$23,$10,$21,$23,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 24
+	.byte $00,$22,$23,$10,$21,$23,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
+	;; row 25
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 25
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 26
 
+	;; row 26
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 27
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 28
 
+	;; row 27
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 29
-
-
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
-	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00 ; row 30
 
-	;; attributes are all blank to start with since we just use black and white
+	;; row 28
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 29
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
+	;; row 30
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+
 attributes:  ; 8 x 8 = 64 bytes
-	.byte %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000, %00000000
-	.byte %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101, %00000101
+	.byte %00000101, %00000101, %00000101, %00000101
+	.byte %00000101, %00000101, %00000101, %00000101
+
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
+
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
+
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
+
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
+
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
+
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
+
+	;; bottom row attributes
+	.byte %00000101, %00000101, %00000101, %00000101
+	.byte %00000101, %00000101, %00000101, %00000101
