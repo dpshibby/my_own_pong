@@ -5,7 +5,7 @@ default_palette:
 	.byte $1F, $20, $20, $20
 	.byte $1F, $20, $20, $20
 
-	.byte $1F, $20, $20, $20 ; sprite palettes
+	.byte $1F, $00, $10, $20 ; sprite palettes
 	.byte $1F, $20, $20, $20
 	.byte $1F, $20, $20, $20
 	.byte $1F, $20, $20, $20

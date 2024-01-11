@@ -23,8 +23,10 @@ serving:	.res 1		; 0 for p1, 1 for p2
 ctrl_input_1:	.res 1
 ctrl_input_2:	.res 1
 
-paddle_1_y:	.res 1
-paddle_2_y:	.res 1
+paddle_1_top:	.res 1
+paddle_1_bot:	.res 1
+paddle_2_top:	.res 1
+paddle_2_bot:	.res 1
 paddle_speed:	.res 1
 
 ball_x:		.res 1
@@ -54,8 +56,9 @@ palette_buffer:	.res 32
 	BOTTOM_WALL  = $E7
 	LEFT_WALL    = $04
 
-	PADDLE_1_X   = $08
+	PADDLE_1_X   = $0C
 	PADDLE_2_X   = $F0
+	PADDLE_START_Y = $70
 
 	BALL_START_X = $80
 	BALL_START_Y = $50
@@ -208,6 +211,7 @@ get_buttons:
 MOVE_PADDLES:
 	;; start of player 1 movement
 	LDA ctrl_input_1
+	LDA ctrl_input_1
 	AND #BTN_UP
 	BNE move_paddle_1_up
 	LDA ctrl_input_1
@@ -216,27 +220,27 @@ MOVE_PADDLES:
 	JMP paddle_1_move_done
 
 move_paddle_1_up:
-	LDA paddle_1_y
+	LDA paddle_1_top
 	SEC
 	SBC paddle_speed
 	CMP #TOP_WALL
 	BCC paddle_1_up_snap	; if touching or beyond top, snap into it
-	STA paddle_1_y
+	STA paddle_1_top
 	JMP paddle_1_move_done
 
 
 paddle_1_up_snap:
 	LDA #TOP_WALL
-	STA paddle_1_y
+	STA paddle_1_top
 	JMP paddle_1_move_done
 
 	;; end of moving up section
 
 move_paddle_1_down:
-	LDA paddle_1_y
+	LDA paddle_1_top
 	CLC
 	ADC paddle_speed
-	STA paddle_1_y
+	STA paddle_1_top
 	CLC			; we add 16 here, 8 to get to lower block of
 	ADC #$10		; the paddle and 8 to get to bottom of sprite
 	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
@@ -247,10 +251,14 @@ paddle_1_down_snap:
 	LDA #BOTTOM_WALL
 	SEC
 	SBC #$10
-	STA paddle_1_y
+	STA paddle_1_top
 	;; JMP paddle_1_move_done
 
 paddle_1_move_done:
+	LDA paddle_1_top
+	CLC
+	ADC #$10
+	STA paddle_1_bot
 
 	;; now for paddle 2
 	LDA ctrl_input_2
@@ -262,27 +270,27 @@ paddle_1_move_done:
 	JMP paddle_2_move_done
 
 move_paddle_2_up:
-	LDA paddle_2_y
+	LDA paddle_2_top
 	SEC
 	SBC paddle_speed
 	CMP #TOP_WALL
 	BCC paddle_2_up_snap	; if touching or beyond top, snap into it
-	STA paddle_2_y
+	STA paddle_2_top
 	JMP paddle_2_move_done
 
 
 paddle_2_up_snap:
 	LDA #TOP_WALL
-	STA paddle_2_y
+	STA paddle_2_top
 	JMP paddle_2_move_done
 
 	;; end of moving up section
 
 move_paddle_2_down:
-	LDA paddle_2_y
+	LDA paddle_2_top
 	CLC
 	ADC paddle_speed
-	STA paddle_2_y
+	STA paddle_2_top
 	CLC			; we add 16 here, 8 to get to lower block of
 	ADC #$10		; the paddle and 8 to get to bottom of sprite
 	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
@@ -293,10 +301,15 @@ paddle_2_down_snap:
 	LDA #BOTTOM_WALL
 	SEC
 	SBC #$10
-	STA paddle_2_y
+	STA paddle_2_top
 	;; JMP paddle_2_move_done
 
 paddle_2_move_done:
+	LDA paddle_2_top
+	CLC
+	ADC #$10
+	STA paddle_2_bot
+
 	RTS
 ;;; END OF MOVE_PADDLES ;;;
 
@@ -456,11 +469,17 @@ insideloop:
 	LDA #$03
 	STA paddle_speed
 
-	LDA #$70
-	STA paddle_1_y
+	LDA #PADDLE_START_Y
+	STA paddle_1_top
+	CLC
+	ADC #$10
+	STA paddle_1_bot
 
-	LDA #$70
-	STA paddle_2_y
+	LDA #PADDLE_START_Y
+	STA paddle_2_top
+	CLC
+	ADC #$10
+	STA paddle_2_bot
 
 	;; set up initial vals for ball
 	LDA #$01
@@ -510,7 +529,7 @@ SERVE:
 	;; keep the ball on the one serving
 	LDA serving
 	BNE p2_serve
-	LDA paddle_1_y
+	LDA paddle_1_top
 	CLC
 	ADC #$04
 	STA ball_y
@@ -531,7 +550,7 @@ SERVE:
 	JMP GAME
 
 p2_serve:
-	LDA paddle_2_y
+	LDA paddle_2_top
 	CLC
 	ADC #$04
 	STA ball_y
@@ -586,7 +605,6 @@ move_ball_right:
 	;; ball right movement done
 
 ball_horiz_movement_done:
-
 	LDA ball_up
 	BEQ move_ball_down
 move_ball_up:
@@ -616,7 +634,7 @@ move_ball_down:
 
 	LDA ball_y
 	CLC
-	ADC #$08		; get to bottom of ball sprite
+	ADC #$04		; get to bottom of ball sprite
 	CMP #BOTTOM_WALL
 	BCC ball_vert_movement_done
 
@@ -635,7 +653,7 @@ ball_vert_movement_done:
 	BEQ player_2_score
 
 	CLC
-	ADC #$08		; get right side of ball
+	ADC #$04		; get right side of ball
 	CMP #RIGHT_WALL
 	BCC score_check_done
 player_1_score:
@@ -672,28 +690,26 @@ score_check_done:
 
 
 	;; check collisions on paddles
-	;; paddle 1:
-	LDA ball_x
-	SEC
-	SBC #$08
-	CMP #PADDLE_1_X
-	BCS paddle_1_collision_done
 
+	;; paddle 1:
+	;; first: is left side of ball reaching the paddle yet?
+	LDA #PADDLE_1_X
+	CLC
+	ADC #$04		; get right side of paddle
+	CMP ball_x
+	BCC paddle_1_collision_done
+
+	;; second: is bottom of ball under top of paddle
 	LDA ball_y
 	CLC
-	ADC #$08
-	CMP paddle_1_y
+	ADC #$04
+	CMP paddle_1_top
 	BEQ paddle_1_collision_done
 	BCC paddle_1_collision_done
 
-	;; here we take ball_y and subtract 16 from it and compare it to
-	;; the paddle_1_y, this is the same as comparing ball_y to
-	;; the bottom portion of the paddle since we don't actually
-	;; use a variable to keep that value
+	;; third: is top of ball over bottom of paddle?
 	LDA ball_y
-	SEC
-	SBC #$10
-	CMP paddle_1_y
+	CMP paddle_1_bot
 	BCS paddle_1_collision_done
 
 	LDA #$00
@@ -702,28 +718,24 @@ score_check_done:
 paddle_1_collision_done:
 
 	;; paddle 2:
+	;; first: is right side of ball reaching the paddle yet?
 	LDA ball_x
 	CLC
-	ADC #$08
+	ADC #$04		; get right side
 	CMP #PADDLE_2_X
-	BEQ paddle_2_collision_done
 	BCC paddle_2_collision_done
 
+	;; second: is bottom of ball under top of paddle?
 	LDA ball_y
 	CLC
-	ADC #$08
-	CMP paddle_2_y
+	ADC #$04		; get bottom of ball sprite
+	CMP paddle_2_top
 	BEQ paddle_2_collision_done
 	BCC paddle_2_collision_done
 
-	;; here we take ball_y and subtract 16 from it and compare it to
-	;; the paddle_2_y, this is the same as comparing ball_y to
-	;; the bottom portion of the paddle since we don't actually
-	;; use a variable to keep that value
+	;; third: is top of ball over bottom of paddle?
 	LDA ball_y
-	SEC
-	SBC #$10
-	CMP paddle_2_y
+	CMP paddle_2_bot
 	BCS paddle_2_collision_done
 
 	LDA #$01
@@ -743,7 +755,7 @@ COMMON_END:
 	LDA ball_y
 	STA $0200
 
-	LDA #$00		; sprite 0 is plain white block
+	LDA #$00		; sprite 0 is the ball
 	STA $0201
 
 	STA $0202		; A still == 0
@@ -754,12 +766,13 @@ COMMON_END:
 	;; ball finished
 	;; start paddles
 
-	LDA paddle_1_y
+	LDA paddle_1_top
 	STA $0204
 
-	LDA #$00
+	LDA #$01
 	STA $0205
 
+	LDA #$00
 	STA $0206
 
 	;; don't think this is necessary because X doesn't change
@@ -767,14 +780,15 @@ COMMON_END:
 	STA $0207
 
 	;; paddle 1, lower block
-	LDA paddle_1_y
+	LDA paddle_1_top
 	CLC
 	ADC #$08
 	STA $0208
 
-	LDA #$00
+	LDA #$01
 	STA $0209
 
+	LDA #$00
 	STA $020A
 
 	;; don't think this is necessary because X doesn't change
@@ -782,12 +796,13 @@ COMMON_END:
 	STA $020B
 	;; paddle 1 done
 
-	LDA paddle_2_y
+	LDA paddle_2_top
 	STA $020C
 
-	LDA #$00
+	LDA #$01
 	STA $020D
 
+	LDA #$00
 	STA $020E
 
 	;; don't think this is necessary because X doesn't change
@@ -795,14 +810,15 @@ COMMON_END:
 	STA $020F
 
 	;; paddle 2, lower block
-	LDA paddle_2_y
+	LDA paddle_2_top
 	CLC
 	ADC #$08
 	STA $0210
 
-	LDA #$00
+	LDA #$01
 	STA $0211
 
+	LDA #$00
 	STA $0212
 
 	;; don't think this is necessary because X doesn't change
