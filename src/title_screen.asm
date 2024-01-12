@@ -1,21 +1,23 @@
 	;; Title Screen constants
-	PS_MSB        = $22
-	PS_LSB        = $EA
-	PS_SIZE       = $0C
+	PS_MSB            = $22
+	PS_LSB            = $EA
+	PS_SIZE           = $0C
 
-	PLAY_MSB      = $22
-	PLAY_LSB      = $CF
-	PLAY_SIZE     = $04
+	PLAY_MSB          = $22
+	PLAY_LSB          = $CF
+	PLAY_SIZE         = $04
 
-	OPT_MSB       = $23
-	OPT_LSB       = $2F
-	OPT_SIZE      = $07
+	OPT_MSB           = $23
+	OPT_LSB           = $2F
+	OPT_SIZE          = $07
 
-	BALL_SPD_MSB  = $22
-	BALL_SPD_LSB  = $CF
-	BALL_SPD_SIZE = $CF
+	BALL_SPD_MSB      = $22
+	BALL_SPD_LSB      = $CF
+	BALL_SPD_SIZE     = $CF
 
-	CURSOR_X  = $68
+	CURSOR_X          = $68
+	CURSOR_FIRST_POS  = $B1
+	CURSOR_SECOND_POS = $C9
 
 	BALL_SPD_Y_POS = $48
 
@@ -335,7 +337,7 @@ back_to_title:
 	;; hide cursor
 	LDA #$FF
 	STA $0200
-	LDA #$AF
+	LDA #CURSOR_FIRST_POS
 	STA cursor_y
 
 	;; signal need to update background during NMI
@@ -346,12 +348,12 @@ back_to_title:
 	JMP TITLE_SCREEN
 
 move_up:
-	LDA #$AF
+	LDA #CURSOR_FIRST_POS
 	STA cursor_y
 	JMP end_title_menu
 
 move_down:
-	LDA #$C7
+	LDA #CURSOR_SECOND_POS
 	STA cursor_y
 	JMP end_title_menu
 
@@ -366,7 +368,7 @@ options_menu_loop:
 option_select:
 	;; open submenu or start the game depending on choice
 	LDA cursor_y
-	CMP #$C7
+	CMP #CURSOR_SECOND_POS
 	BEQ open_options	; this is for opening the options menu but for
 				; now does nothing
 

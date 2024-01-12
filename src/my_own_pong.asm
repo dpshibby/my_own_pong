@@ -1,3 +1,9 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; TODO:
+;;; * clean up comparisons a little more, maybe get rid of paddle_X_bot vars
+;;; * reorganize game flow to be a little more function-based
+;;;   - hopefully that helps with debugging
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	.include "header.asm"
 	.include "constants.asm"
 
@@ -19,14 +25,14 @@ p1_score_LSB:	.res 1
 p2_score_MSB:	.res 1
 p2_score_LSB:	.res 1
 serving:	.res 1		; 0 for p1, 1 for p2
+				; this variable is also used to check which
+				; player scored, 1 for p1, 0 for p2
 
 ctrl_input_1:	.res 1
 ctrl_input_2:	.res 1
 
 paddle_1_top:	.res 1
-paddle_1_bot:	.res 1
 paddle_2_top:	.res 1
-paddle_2_bot:	.res 1
 paddle_speed:	.res 1
 
 ball_x:		.res 1
@@ -51,17 +57,21 @@ nmt_buffer:	.res 256
 palette_buffer:	.res 32
 
 	;; Game specific constants
-	TOP_WALL     = $07
-	RIGHT_WALL   = $F4
-	BOTTOM_WALL  = $E7
-	LEFT_WALL    = $04
+	TOP_WALL       = $07
+	RIGHT_WALL     = $F4
+	BOTTOM_WALL    = $E7
+	LEFT_WALL      = $04
 
-	PADDLE_1_X   = $0C
-	PADDLE_2_X   = $F0
+	PADDLE_1_X     = $0C
+	PADDLE_2_X     = $F0
 	PADDLE_START_Y = $70
+	PADDLE_WIDTH   = $04
+	PADDLE_LEN     = $10
 
-	BALL_START_X = $80
-	BALL_START_Y = $50
+	BALL_START_X   = $80
+	BALL_START_Y   = $50
+	BALL_DIAMETER  = $04
+	BALL_START_SPD = $01
 
 	.segment "CODE"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -241,24 +251,20 @@ move_paddle_1_down:
 	CLC
 	ADC paddle_speed
 	STA paddle_1_top
-	CLC			; we add 16 here, 8 to get to lower block of
-	ADC #$10		; the paddle and 8 to get to bottom of sprite
-	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
+	CLC
+	ADC #PADDLE_LEN		; get bottom of paddle
+	CMP #BOTTOM_WALL
 	BCS paddle_1_down_snap
 	JMP paddle_1_move_done
 
 paddle_1_down_snap:
 	LDA #BOTTOM_WALL
 	SEC
-	SBC #$10
+	SBC #PADDLE_LEN
 	STA paddle_1_top
 	;; JMP paddle_1_move_done
 
 paddle_1_move_done:
-	LDA paddle_1_top
-	CLC
-	ADC #$10
-	STA paddle_1_bot
 
 	;; now for paddle 2
 	LDA ctrl_input_2
@@ -291,28 +297,132 @@ move_paddle_2_down:
 	CLC
 	ADC paddle_speed
 	STA paddle_2_top
-	CLC			; we add 16 here, 8 to get to lower block of
-	ADC #$10		; the paddle and 8 to get to bottom of sprite
-	CMP #BOTTOM_WALL	; if touching bottom wall, don't keep moving
+	CLC
+	ADC #PADDLE_LEN		; get bottom of paddle
+	CMP #BOTTOM_WALL
 	BCS paddle_2_down_snap
 	JMP paddle_2_move_done
 
 paddle_2_down_snap:
 	LDA #BOTTOM_WALL
 	SEC
-	SBC #$10
+	SBC #PADDLE_LEN
 	STA paddle_2_top
 	;; JMP paddle_2_move_done
 
 paddle_2_move_done:
-	LDA paddle_2_top
-	CLC
-	ADC #$10
-	STA paddle_2_bot
-
 	RTS
 ;;; END OF MOVE_PADDLES ;;;
 
+MOVE_BALL_UP:
+	LDA ball_y
+	SEC
+	SBC ball_speed		; subtract since pos Y is down the screen
+	STA ball_y
+	RTS
+
+BALL_CEILING_COLLIS:
+	LDA #TOP_WALL
+	CMP ball_y
+	BCC no_ceil_collis
+
+	LDA #$00
+	STA ball_up
+no_ceil_collis:
+	RTS
+
+MOVE_BALL_DOWN:
+	LDA ball_y
+	CLC
+	ADC ball_speed
+	STA ball_y
+	RTS
+
+BALL_FLOOR_COLLIS:
+	LDA ball_y
+	CLC
+	ADC #BALL_DIAMETER	; get to bottom of ball sprite
+	CMP #BOTTOM_WALL
+	BCC no_floor_collis
+
+	LDA #$01
+	STA ball_up
+no_floor_collis:
+	RTS
+
+	;; move the ball to the left based on speed
+MOVE_BALL_LEFT:
+	LDA ball_x
+	SEC
+	SBC ball_speed
+	STA ball_x
+	RTS
+
+BALL_LEFT_PADDLE_COLLIS:
+	;; first: is left side of ball reaching the paddle yet?
+	LDA #PADDLE_1_X
+	CLC
+	ADC #PADDLE_WIDTH	; get right side of paddle
+	CMP ball_x
+	BCC no_left_paddle_collis
+
+	;; second: is bottom of ball under top of paddle
+	LDA ball_y
+	CLC
+	ADC #BALL_DIAMETER
+	CMP paddle_1_top
+	BEQ no_left_paddle_collis
+	BCC no_left_paddle_collis
+
+	;; third: is top of ball over bottom of paddle?
+	LDA paddle_1_top
+	CLC
+	ADC #PADDLE_LEN
+	CMP ball_y
+	BEQ no_left_paddle_collis
+	BCC no_left_paddle_collis
+
+	LDA #$00
+	STA ball_left
+no_left_paddle_collis:
+	RTS
+
+	;; move the ball to the right based on speed
+MOVE_BALL_RIGHT:
+	LDA ball_x
+	CLC
+	ADC ball_speed
+	STA ball_x
+	RTS
+
+BALL_RIGHT_PADDLE_COLLIS:
+	;; first: is right side of ball reaching the paddle yet?
+	LDA ball_x
+	CLC
+	ADC #BALL_DIAMETER	; get right side
+	CMP #PADDLE_2_X
+	BCC no_right_paddle_collis
+
+	;; second: is bottom of ball under top of paddle?
+	LDA ball_y
+	CLC
+	ADC #BALL_DIAMETER	; get bottom of ball sprite
+	CMP paddle_2_top
+	BEQ no_right_paddle_collis
+	BCC no_right_paddle_collis
+
+	;; third: is top of ball over bottom of paddle?
+	LDA paddle_2_top
+	CLC
+	ADC #PADDLE_LEN
+	CMP ball_y
+	BEQ no_right_paddle_collis
+	BCC no_right_paddle_collis
+
+	LDA #$01
+	STA ball_left
+no_right_paddle_collis:
+	RTS
 
 	;; Draws the scoreboard at the top of the screen
 DRAW_SCORE:
@@ -471,19 +581,15 @@ insideloop:
 
 	LDA #PADDLE_START_Y
 	STA paddle_1_top
-	CLC
-	ADC #$10
-	STA paddle_1_bot
 
 	LDA #PADDLE_START_Y
 	STA paddle_2_top
-	CLC
-	ADC #$10
-	STA paddle_2_bot
 
 	;; set up initial vals for ball
-	LDA #$01
+	LDA #BALL_START_SPD
 	STA ball_speed
+
+	LDA #$00
 	STA ball_up
 	STA ball_left
 
@@ -507,8 +613,11 @@ insideloop:
 	STA serving
 	LDA #$20
 	STA anim_speed
-	LDA #$AF
+	LDA #CURSOR_FIRST_POS
 	STA cursor_y
+
+	;; uncomment for quick start/debug mode
+	;; .include "debug.asm"
 
 	JMP TITLE_SCREEN
 	.include "title_screen.asm"
@@ -519,6 +628,12 @@ GAME_START:
 	JSR WAIT_FRAME
 	JSR WAIT_FRAME
 	JSR WAIT_FRAME
+
+GAME_LOOP:
+	JSR SERVE
+	JSR PLAY
+	JSR SCORE
+	JMP GAME_LOOP
 
 SERVE:
 	JSR GET_PLAYER_INPUT
@@ -531,12 +646,12 @@ SERVE:
 	BNE p2_serve
 	LDA paddle_1_top
 	CLC
-	ADC #$04
+	ADC #$06		; keep ball at middle of paddle
 	STA ball_y
 
 	LDA #PADDLE_1_X
 	CLC
-	ADC #$0A
+	ADC #$0A		; 10 pixels from paddle 1
 	STA ball_x
 
 	;; now check if the player pressed A to serve
@@ -547,17 +662,17 @@ SERVE:
 	STA ball_up
 	STA ball_left
 
-	JMP GAME
+	RTS
 
 p2_serve:
 	LDA paddle_2_top
 	CLC
-	ADC #$04
+	ADC #$06		; keep ball at middle of paddle
 	STA ball_y
 
 	LDA #PADDLE_2_X
 	SEC
-	SBC #$0A
+	SBC #$0A		; 10 pixels from paddle 2
 	STA ball_x
 
 	;; now check if the player pressed A to serve
@@ -567,13 +682,13 @@ p2_serve:
 	LDA #$01
 	STA ball_up
 	STA ball_left
-	JMP GAME
+	RTS
 
 serve_done:
 	JSR COMMON_END
 	JMP SERVE
 
-GAME:
+PLAY:
 	JSR GET_PLAYER_INPUT
 
 	;; move the paddles
@@ -581,170 +696,102 @@ GAME:
 
 	;; move the ball
 
+	LDA ball_up
+	BEQ ball_down
+
+	JSR MOVE_BALL_UP
+
+	;; check if ball is hitting top of screen
+	JSR BALL_CEILING_COLLIS
+	JMP ball_vert_move_done
+	;; ball up movement done
+
+ball_down:
+	JSR MOVE_BALL_DOWN
+
+	;; check if ball is hitting bottom of screen
+	JSR BALL_FLOOR_COLLIS
+	;; ball down movement done
+
+ball_vert_move_done:
+
 	LDA ball_left
-	BEQ move_ball_right
+	BEQ ball_right
 
-move_ball_left:
+	JSR MOVE_BALL_LEFT
+
+	;; check if p2 scores by ball going off left side
 	LDA ball_x
-	SEC
-	SBC ball_speed
-	STA ball_x
+	CMP #LEFT_WALL
+	BEQ player_2_score
+	BCC player_2_score
 
-	JMP ball_horiz_movement_done
+	;; then check for left side paddle collis
+	JSR BALL_LEFT_PADDLE_COLLIS
 
+	JMP ball_horiz_move_done
 	;; ball left movement done
 
-move_ball_right:
+	;; these scoring labels are the exit point of the PLAY function
+player_1_score:
+	LDA #$01
+	STA serving
+	RTS
+	
+player_2_score:
+	LDA #$00
+	STA serving
+	RTS
+
+ball_right:
+	JSR MOVE_BALL_RIGHT
+
+	;; check if p1 scores by ball going off right side
 	LDA ball_x
 	CLC
-	ADC ball_speed
-	STA ball_x
+	ADC #BALL_DIAMETER	; get right side of ball
+	CMP #RIGHT_WALL
+	BCS player_1_score
 
-	;; JMP ball_horiz_movement_done
+	;; then check for right side paddle collis
+	JSR BALL_RIGHT_PADDLE_COLLIS
 
 	;; ball right movement done
 
-ball_horiz_movement_done:
-	LDA ball_up
-	BEQ move_ball_down
-move_ball_up:
-	LDA ball_y
-	SEC
-	SBC ball_speed		; subtract since pos Y is down the screen
-	STA ball_y
+ball_horiz_move_done:
 
-	;; check if ball is hitting top of screen
-	LDA ball_y
-	CMP #TOP_WALL
-	BEQ ball_switch
-	BCS ball_vert_movement_done
+	JSR COMMON_END
+	JMP PLAY
 
-ball_switch:
-	LDA #$00
-	STA ball_up		; switch direction to down
-	JMP ball_vert_movement_done
+SCORE:
+	;; who scored?
+	LDA serving
+	BEQ p2_scored
 
-	;; ball up movement done
-
-move_ball_down:
-	LDA ball_y
-	CLC
-	ADC ball_speed
-	STA ball_y
-
-	LDA ball_y
-	CLC
-	ADC #$04		; get to bottom of ball sprite
-	CMP #BOTTOM_WALL
-	BCC ball_vert_movement_done
-
-	LDA #$01
-	STA ball_up
-	JMP ball_vert_movement_done
-
-	;; ball down movement done
-
-ball_vert_movement_done:
-
-	;; check if someone scores
-	LDA ball_x
-	CMP #LEFT_WALL
-	BCC player_2_score
-	BEQ player_2_score
-
-	CLC
-	ADC #$04		; get right side of ball
-	CMP #RIGHT_WALL
-	BCC score_check_done
-player_1_score:
+	;; else p1 scored
 	INC p1_score_LSB
 	LDA p1_score_LSB
 	CMP #$0A
-	BNE p2_serve_setup
+	BNE score_end
 	INC p1_score_MSB
 	LDA #$00
 	STA p1_score_LSB
+	JMP score_end
 
-p2_serve_setup:
-	LDA #$01
-	STA serving
-	JSR DRAW_SCORE
-	JMP SERVE
-
-player_2_score:
+p2_scored:
 	INC p2_score_LSB
 	LDA p2_score_LSB
 	CMP #$0A
-	BNE p1_serve
+	BNE score_end
 	INC p2_score_MSB
 	LDA #$00
 	STA p2_score_LSB
 
-p1_serve:
-	LDA #$00
-	STA serving
+score_end:
 	JSR DRAW_SCORE
-	JMP SERVE
-
-score_check_done:
-
-
-	;; check collisions on paddles
-
-	;; paddle 1:
-	;; first: is left side of ball reaching the paddle yet?
-	LDA #PADDLE_1_X
-	CLC
-	ADC #$04		; get right side of paddle
-	CMP ball_x
-	BCC paddle_1_collision_done
-
-	;; second: is bottom of ball under top of paddle
-	LDA ball_y
-	CLC
-	ADC #$04
-	CMP paddle_1_top
-	BEQ paddle_1_collision_done
-	BCC paddle_1_collision_done
-
-	;; third: is top of ball over bottom of paddle?
-	LDA ball_y
-	CMP paddle_1_bot
-	BCS paddle_1_collision_done
-
-	LDA #$00
-	STA ball_left
-
-paddle_1_collision_done:
-
-	;; paddle 2:
-	;; first: is right side of ball reaching the paddle yet?
-	LDA ball_x
-	CLC
-	ADC #$04		; get right side
-	CMP #PADDLE_2_X
-	BCC paddle_2_collision_done
-
-	;; second: is bottom of ball under top of paddle?
-	LDA ball_y
-	CLC
-	ADC #$04		; get bottom of ball sprite
-	CMP paddle_2_top
-	BEQ paddle_2_collision_done
-	BCC paddle_2_collision_done
-
-	;; third: is top of ball over bottom of paddle?
-	LDA ball_y
-	CMP paddle_2_bot
-	BCS paddle_2_collision_done
-
-	LDA #$01
-	STA ball_left
-
-paddle_2_collision_done:
-
 	JSR COMMON_END
-	JMP GAME
+	RTS
+
 
 	;; Handle all the sprite drawing for each frame
 	;; then burn cycles until next frame
@@ -829,7 +876,7 @@ COMMON_END:
 	;; actions in the main loop once per frame
 	JSR WAIT_FRAME
 	RTS
-;;; END OF DRAW_SCORE ;;;
+;;; END OF COMMON_END ;;;
 
 sprites:
 	.byte $70, $00, $00, $00
