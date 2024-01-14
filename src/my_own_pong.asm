@@ -1,8 +1,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; TODO:
-;;; * clean up comparisons a little more, maybe get rid of paddle_X_bot vars
-;;; * reorganize game flow to be a little more function-based
-;;;   - hopefully that helps with debugging
+;;; * collisions on top and bottom walls are pretty good!
+;;; * now should do them on the paddles, same technique should work
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	.include "header.asm"
 	.include "constants.asm"
@@ -40,6 +39,7 @@ ball_y:		.res 1
 ball_up:	.res 1		; 1 for up, 0 for down
 ball_left:	.res 1		; 1 for left, 0 for right
 ball_speed:	.res 1
+ball_remainder:	.res 1
 
 cursor_y:	.res 1
 cursor_up:	.res 1
@@ -71,7 +71,7 @@ palette_buffer:	.res 32
 	BALL_START_X   = $80
 	BALL_START_Y   = $50
 	BALL_DIAMETER  = $04
-	BALL_START_SPD = $01
+	BALL_START_SPD = $03
 
 	.segment "CODE"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -324,11 +324,37 @@ MOVE_BALL_UP:
 BALL_CEILING_COLLIS:
 	LDA #TOP_WALL
 	CMP ball_y
-	BCC no_ceil_collis
+	BCC no_ceiling_collis
 
+	LDA ball_remainder
+	BNE consume_ceiling_remainder
+	
+	;; create_ceiling_remainder
+	LDA #TOP_WALL
+	SEC
+	SBC ball_y
+	STA ball_remainder
+	BEQ perfect_ceiling_collis
+	LDA #TOP_WALL
+	STA ball_y
+
+	JMP no_ceiling_collis
+
+consume_ceiling_remainder:
+	LDA #TOP_WALL
+	CLC
+	ADC ball_remainder
+	STA ball_y
+	LDA #$00
+	STA ball_remainder
+
+	;; fall through
+
+perfect_ceiling_collis:
 	LDA #$00
 	STA ball_up
-no_ceil_collis:
+
+no_ceiling_collis:
 	RTS
 
 MOVE_BALL_DOWN:
@@ -345,8 +371,40 @@ BALL_FLOOR_COLLIS:
 	CMP #BOTTOM_WALL
 	BCC no_floor_collis
 
+
+	TAX 			; save our calculated bottom of ball in X
+	LDA ball_remainder
+	BNE consume_floor_remainder
+	
+	;; create_floor_remainder
+	TXA
+	SEC
+	SBC #BOTTOM_WALL
+	STA ball_remainder
+	BEQ perfect_floor_collis
+	LDA #BOTTOM_WALL
+	SEC
+	SBC #BALL_DIAMETER
+	STA ball_y
+
+	JMP no_floor_collis
+
+consume_floor_remainder:
+	LDA #BOTTOM_WALL
+	SEC
+	SBC ball_remainder
+	SEC
+	SBC #BALL_DIAMETER
+	STA ball_y
+	LDA #$00
+	STA ball_remainder
+
+	;; fall through
+
+perfect_floor_collis:
 	LDA #$01
 	STA ball_up
+
 no_floor_collis:
 	RTS
 
@@ -606,6 +664,7 @@ insideloop:
 	STA nmt_len
 	STA frame_counter
 	STA gen_counter
+	STA ball_remainder
 	STA p1_score_MSB
 	STA p1_score_LSB
 	STA p2_score_MSB
@@ -617,7 +676,7 @@ insideloop:
 	STA cursor_y
 
 	;; uncomment for quick start/debug mode
-	;; .include "debug.asm"
+	.include "debug.asm"
 
 	JMP TITLE_SCREEN
 	.include "title_screen.asm"

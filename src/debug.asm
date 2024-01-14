@@ -95,15 +95,19 @@ DEBUG_RESET:
 	;; reset ball
 	LDA #BALL_START_X
 	STA ball_x
-	LDA #$7E
+	LDA #BALL_START_Y
 	STA ball_y
 	LDA #$00
 	STA ball_left
 	LDA #$01
+	STA ball_left
+	LDA #$03
 	STA ball_speed
 
 	;; reset paddles
 	LDA #PADDLE_START_Y
+	CLC
+	ADC #$00
 	STA paddle_1_top
 
 	LDA #PADDLE_START_Y
