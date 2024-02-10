@@ -1,13 +1,3 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; TODO:
-;;; * change fractional ball movement to use fixed-point arithmetic
-;;;
-;;; * new left paddle collis seems to work so far, need to test more angles
-;;;   and also make the vert ejection section better
-;;;   - vert is pretty good, maybe still have it decide if it will change X
-;;;     direction based on where the hit lands
-;;; * maybe try ejecting x and y 1 at a time until one is outside the paddle
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	.include "header.asm"
 	.include "constants.asm"
 
@@ -518,7 +508,7 @@ horiz_angle_set_done:
 	;; when it happens to hit a paddle on the very top or bottom
 VERT_ANGLE_SET:
 	JMP (pointerLo)
-	
+
 paddle_angle_five_rfl:
 	JSR SET_ANGLE_FIVE
 	LDA ball_left
@@ -621,8 +611,6 @@ SET_ANGLE_FIVE:			; 2.4y / 0.7x
 	STA ball_frac_dy
 
 	RTS
-
-
 ;;; END OF ANGLE SET FUNCTIONS ;;;
 
 	;; move the ball to the left based on speed
@@ -741,7 +729,7 @@ left_paddle_top_collis:
 	LDA #$01
 	STA ball_up
 	JMP no_left_paddle_collis
-	
+
 left_paddle_horiz_collis:
 	LDA paddle_1_top
 	CLC
@@ -1566,4 +1554,3 @@ horiz_angle_table:
 	.word paddle_angle_four_up
 	.word paddle_angle_four_up ; need an extra entry here for when the ball
 				  ; hits on top of the paddle
-	;; .word $0000
