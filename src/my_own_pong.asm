@@ -1,10 +1,3 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;D
-;;; TODO:
-;;; * left paddle collision is very close to being good!
-;;; - need to keep testing at different heights/angles
-;;; * need to make the ball score earlier and/or add a check to not collide
-;;;   if we're already behind the paddle
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 	.include "header.asm"
 	.include "constants.asm"
 
@@ -43,12 +36,12 @@ ball_left:	.res 1		; 1 for left, 0 for right
 
 ball_speed_x:	.res 1
 ball_frac_x:	.res 1
-ball_frac_x_mx:	.res 1
+ball_frac_dx:	.res 1
 ball_remndr_x:	.res 1
 
 ball_speed_y:	.res 1
 ball_frac_y:	.res 1
-ball_frac_y_mx:	.res 1
+ball_frac_dy:	.res 1
 ball_remndr_y:	.res 1
 
 cursor_y:	.res 1
@@ -68,7 +61,7 @@ palette_buffer:	.res 32
 
 	;; Game specific constants
 	TOP_WALL         = $07
-	RIGHT_WALL       = $F4
+	RIGHT_WALL       = $FB
 	BOTTOM_WALL      = $E7
 	LEFT_WALL        = $04
 
@@ -332,16 +325,19 @@ MOVE_BALL_UP:
 	SBC ball_speed_y	; subtract since pos Y is down the screen
 	STA ball_y
 
-	DEC ball_frac_y
-	BNE move_ball_up_done
-
 	;; apply fractional movement
-	LDA ball_frac_y_mx
-	BEQ move_ball_up_done
+	LDA ball_frac_y
+	CLC
+	ADC ball_frac_dy
+	CMP #$64
+	BCC move_ball_up_done
+	;; else fraction went over 100, add 1 to movement, sub 100 from fraction
 	DEC ball_y
-	STA ball_frac_y
+	SEC
+	SBC #$64
 
 move_ball_up_done:
+	STA ball_frac_y
 	RTS
 ;;; END OF MOVE_BALL_UP ;;;
 
@@ -390,16 +386,19 @@ MOVE_BALL_DOWN:
 	ADC ball_speed_y
 	STA ball_y
 
-	DEC ball_frac_y
-	BNE move_ball_down_done
-
 	;; apply fractional movement
-	LDA ball_frac_y_mx
-	BEQ move_ball_up_done
+	LDA ball_frac_y
+	CLC
+	ADC ball_frac_dy
+	CMP #$64
+	BCC move_ball_down_done
+	;; else fraction went over 100, add 1 to movement, sub 100 from fraction
 	INC ball_y
-	STA ball_frac_y
+	SEC
+	SBC #$64
 
 move_ball_down_done:
+	STA ball_frac_y
 	RTS
 ;;; END OF MOVE_BALL_DOWN ;;;
 
@@ -453,138 +452,163 @@ no_floor_collis:
 
 	;; This function decides which angle to reflect the pong ball
 	;; after it hits a paddle, it is used by both paddles
-ANGLE_SET:
+HORIZ_ANGLE_SET:
 	JMP (pointerLo)
 
-paddle_angle_one_down:
-	JSR SET_ANGLE_ONE
-	JMP angle_down
-
-paddle_angle_two_down:
-	JSR SET_ANGLE_TWO
+paddle_angle_four_down:
+	JSR SET_ANGLE_FOUR
 	JMP angle_down
 
 paddle_angle_three_down:
 	JSR SET_ANGLE_THREE
 	JMP angle_down
 
-paddle_angle_four_down:
-	JSR SET_ANGLE_FOUR
+paddle_angle_two_down:
+	JSR SET_ANGLE_TWO
 	JMP angle_down
 
-paddle_angle_five:
-	JSR SET_ANGLE_FIVE
-	JMP angle_set_done
+paddle_angle_one_down:
+	JSR SET_ANGLE_ONE
+	JMP angle_down
 
-paddle_angle_four_up:
-	JSR SET_ANGLE_FOUR
-	JMP angle_up
+paddle_angle_zero:		; horiztonal
+	JSR SET_ANGLE_ZERO
+	JMP horiz_angle_set_done
 
-paddle_angle_three_up:
-	JSR SET_ANGLE_THREE
+paddle_angle_one_up:
+	JSR SET_ANGLE_ONE
 	JMP angle_up
 
 paddle_angle_two_up:
 	JSR SET_ANGLE_TWO
 	JMP angle_up
 
-paddle_angle_one_up:
-	JSR SET_ANGLE_ONE
+paddle_angle_three_up:
+	JSR SET_ANGLE_THREE
+	JMP angle_up
+
+paddle_angle_four_up:
+	JSR SET_ANGLE_FOUR
 	;; JMP angle_up
 	;; fall through
 angle_up:
 	LDA #$01
 	STA ball_up
-	JMP angle_set_done
+	JMP horiz_angle_set_done
 
 angle_down:
 	LDA #$00
 	STA ball_up
 
-angle_set_done:
+horiz_angle_set_done:
 	RTS
-;;; END OF ANGLE_SET ;;;
+;;; END OF HORIZ_ANGLE_SET ;;;
+
+	;; This function decides which angle to reflect the pong ball
+	;; when it happens to hit a paddle on the very top or bottom
+VERT_ANGLE_SET:
+	JMP (pointerLo)
+
+paddle_angle_five_rfl:
+	JSR SET_ANGLE_FIVE
+	LDA ball_left
+	EOR #$01
+	STA ball_left
+	JMP vert_angle_set_done
+
+paddle_angle_five_same:
+	JSR SET_ANGLE_FIVE
+	;; JMP vert_angle_set_done
+	;; fall through
+
+vert_angle_set_done:
+	RTS
 
 
-	;; set the x and y speeds to a y-favored setting
-	;; later this will have to be made to set them
-	;; based on the current speed level of the game
+
+
+	;; in this set of functions we set the ball to the
+	;; appropriate angle after it hits a paddle
+	;; same as above function but horizontal angle
 	;; note: the calling code is responsible for
 	;; setting the direction properly
-SET_ANGLE_ONE:			; 2.33y / 1.0x
-	LDA #$01
-	STA ball_speed_x
-	LDA #$00
-	STA ball_frac_x
-	STA ball_frac_x_mx
-
+SET_ANGLE_ZERO:			; 0.0y / 2.5x
 	LDA #$02
+	STA ball_speed_x
+	LDA #$32
+	STA ball_frac_dx
+
+	LDA #$00
 	STA ball_speed_y
-	LDA #$03
-	STA ball_frac_y
-	STA ball_frac_y_mx
+	STA ball_frac_dy
 
 	RTS
 
-	;; same as above function but a less extreme angle
-SET_ANGLE_TWO:			; 1.5y / 2.0x
+	;; same as above function, next most x-favored angle
+SET_ANGLE_ONE:			; 0.7y / 2.4x
 	LDA #$02
 	STA ball_speed_x
-	LDA #$00
-	STA ball_frac_x
-	STA ball_frac_x_mx
+	LDA #$28
+	STA ball_frac_dx
 
-	LDA #$01
+	LDA #$00
 	STA ball_speed_y
-	LDA #$02
-	STA ball_frac_y
-	STA ball_frac_y_mx
+	LDA #$46
+	STA ball_frac_dy
 
 	RTS
 
-	;; now we pick angles more favored to x
-SET_ANGLE_THREE:			; 1.2x / 2.2x
+	;; same as above, slightly more vertical
+SET_ANGLE_TWO:			; 1.2y / 2.2x
 	LDA #$02
 	STA ball_speed_x
-	LDA #$05
-	STA ball_frac_x
-	STA ball_frac_x_mx
+	LDA #$14
+	STA ball_frac_dx
 
 	LDA #$01
 	STA ball_speed_y
-	LDA #$05
-	STA ball_frac_y
-	STA ball_frac_y_mx
+	LDA #$14
+	STA ball_frac_dy
 
 	RTS
 
-	;; same as above function, slightly more x favored
-SET_ANGLE_FOUR:		; 1.0y / 2.33x
-	LDA #$02
+	;; same as above but even more vertical
+SET_ANGLE_THREE:		; 1.81y / 1.73x
+	LDA #$01
 	STA ball_speed_x
-	LDA #$03
-	STA ball_frac_x
-	STA ball_frac_x_mx
+	LDA #$49
+	STA ball_frac_dx
 
-	LDA #$1
+	LDA #$01
 	STA ball_speed_y
-	LDA #$00
-	STA ball_frac_y
-	STA ball_frac_y_mx
+	LDA #$51
+	STA ball_frac_dy
 
 	RTS
 
-	;; same as above function but horizontal angle
-SET_ANGLE_FIVE:
-	LDA #$02
+SET_ANGLE_FOUR:			; 2.25y / 1.10x
+	LDA #$01
 	STA ball_speed_x
-	STA ball_frac_x
-	STA ball_frac_x_mx
+	LDA #$0A
+	STA ball_frac_dx
 
-	LDA #$00
+	LDA #$02
 	STA ball_speed_y
-	STA ball_frac_y
-	STA ball_frac_y_mx
+	LDA #$19
+	STA ball_frac_dy
+
+	RTS
+
+SET_ANGLE_FIVE:			; 2.4y / 0.7x
+	LDA #$01
+	STA ball_speed_x
+	LDA #$0A
+	STA ball_frac_dx
+
+	LDA #$02
+	STA ball_speed_y
+	LDA #$19
+	STA ball_frac_dy
 
 	RTS
 ;;; END OF ANGLE SET FUNCTIONS ;;;
@@ -596,16 +620,19 @@ MOVE_BALL_LEFT:
 	SBC ball_speed_x
 	STA ball_x
 
-	DEC ball_frac_x
-	BNE move_ball_left_done
-
 	;; apply fractional movement
-	LDA ball_frac_x_mx
-	BEQ move_ball_left_done
+	LDA ball_frac_x
+	CLC
+	ADC ball_frac_dx
+	CMP #$64
+	BCC move_ball_left_done
+	;; else fraction went over 100, add 1 to movement, sub 100 from fraction
 	DEC ball_x
-	STA ball_frac_x
+	SEC
+	SBC #$64
 
 move_ball_left_done:
+	STA ball_frac_x
 	RTS
 ;;; END OF MOVE_BALL_LEFT ;;;
 
@@ -623,7 +650,6 @@ LEFT_PADDLE_AREA_CHECK:
 	CLC
 	ADC #BALL_DIAMETER
 	CMP paddle_1_top
-	BEQ left_paddle_miss
 	BCC left_paddle_miss
 
 	;; third: is top of ball over bottom of paddle?
@@ -631,7 +657,6 @@ LEFT_PADDLE_AREA_CHECK:
 	CLC
 	ADC #PADDLE_LEN
 	CMP ball_y
-	BEQ left_paddle_miss
 	BCC left_paddle_miss
 
 	;; seems like we did in fact collide
@@ -645,62 +670,93 @@ left_paddle_area_check_done:
 ;;; END OF LEFT_PADDLE_AREA_CHECK ;;;
 
 BALL_LEFT_PADDLE_COLLIS:
+	;; first: is right side of ball reaching the paddle yet?
 	LDA #PADDLE_1_X
 	CLC
-	ADC #PADDLE_WIDTH	; get right side of paddle
-	TAX			; save right side of paddle in X
-
+	ADC #PADDLE_WIDTH
+	TAX			; save in X
 	JSR LEFT_PADDLE_AREA_CHECK
 	BEQ no_left_paddle_collis
 
-	;; create remainder
-	TXA			; retrieve right side of paddle
-	SEC
-	SBC ball_x
-	STA ball_remndr_x
-	STX ball_x
+	;; collision definitely happened
+	;; are we going to count it as vertical or horizontal?
 
+	;; if ball has no y speed then ball_up/down will throw off ball
+	;; adjustment, so we check speed here
 	LDA ball_speed_y
-	CMP ball_remndr_x
-	;; if vert speed is less than remainder in x direction
-	;; then we don't bother to correct, should look okay
-	BCC left_paddle_correction_done
-	LDA ball_up
-	BEQ left_paddle_down_correction
-	;; ball is going up, correct y down a bit
-	LDA ball_y
+	BNE left_paddle_test_eject
+	;; else place ball on right side of paddle and assume horiz collis
+	TXA
+	STA ball_x
+	JMP left_paddle_horiz_collis
+left_paddle_test_eject:
+	TXA			; retrieve right side of paddle
+	CMP ball_x
+	BEQ left_paddle_horiz_collis
+	LDA paddle_1_top
 	CLC
-	ADC ball_remndr_x
-	STA ball_y
-	JMP left_paddle_correction_done
-
-left_paddle_down_correction:
-	;; ball is going down, correct y up a bit
-	LDA ball_y
+	ADC #PADDLE_LEN
+	CMP ball_y
+	BEQ left_paddle_bot_collis
+	LDA paddle_1_top
 	SEC
-	SBC ball_remndr_x
-	STA ball_y
+	SBC #BALL_DIAMETER
+	CMP ball_y
+	BEQ left_paddle_top_collis
 
-left_paddle_correction_done:
-	;; now decide on angle reflection
+	;; if none of above conditions are met, we readjust the ball
+	;; then loop back up to try again
+left_paddle_ball_eject:
+	INC ball_x
+
+	LDA ball_up
+	BEQ left_paddle_eject_up
+	;; else ball was moving up and we should eject downward
+	INC ball_y
+	JMP left_paddle_test_eject
+left_paddle_eject_up:
+	DEC ball_y
+
+	;; else no hit, do another loop
+	JMP left_paddle_test_eject
+
+left_paddle_bot_collis:
+	LDA #$00
+	STA ball_up
+	JMP no_left_paddle_collis
+
+left_paddle_top_collis:
+	LDA #$01
+	STA ball_up
+	JMP no_left_paddle_collis
+
+left_paddle_horiz_collis:
 	LDA paddle_1_top
 	CLC
 	ADC #PADDLE_LEN
 	SEC
 	SBC ball_y
+	;; if ball hits riiight on the bottom of the paddle then
+	;; this actually ends up underflowing and breaks, so we just
+	;; manually manipulate so it takes the desired angle
+	BNE left_paddle_normal_collis
+	LDA #$01
+
+left_paddle_normal_collis:
+	SEC
 	SBC #$01
 	ASL
 	TAX
-	LDA angle_table, X
+	LDA horiz_angle_table, X
 	STA pointerLo
 	INX
-	LDA angle_table, X
+	LDA horiz_angle_table, X
 	STA pointerHi
-	JSR ANGLE_SET
+	JSR HORIZ_ANGLE_SET
 
-left_paddle_collis_done:
 	LDA #$00
 	STA ball_left
+
 no_left_paddle_collis:
 	RTS
 ;;; END OF LEFT_PADDLE_COLLIS ;;;
@@ -712,16 +768,19 @@ MOVE_BALL_RIGHT:
 	ADC ball_speed_x
 	STA ball_x
 
-	DEC ball_frac_x
-	BNE move_ball_right_done
-
 	;; apply fractional movement
-	LDA ball_frac_x_mx
-	BEQ move_ball_right_done
+	LDA ball_frac_x
+	CLC
+	ADC ball_frac_dx
+	CMP #$64
+	BCC move_ball_right_done
+	;; else fraction went over 100, add 1 to movement, sub 100 from fraction
 	INC ball_x
-	STA ball_frac_x
+	SEC
+	SBC #$64
 
 move_ball_right_done:
+	STA ball_frac_x
 	RTS
 ;;; END OF MOVE_BALL_RIGHT ;;;
 
@@ -739,7 +798,6 @@ RIGHT_PADDLE_AREA_CHECK:
 	CLC
 	ADC #BALL_DIAMETER	; get bottom of ball sprite
 	CMP paddle_2_top
-	BEQ right_paddle_miss
 	BCC right_paddle_miss
 
 	;; third: is top of ball over bottom of paddle?
@@ -747,7 +805,6 @@ RIGHT_PADDLE_AREA_CHECK:
 	CLC
 	ADC #PADDLE_LEN
 	CMP ball_y
-	BEQ right_paddle_miss
 	BCC right_paddle_miss
 
 	;; seems like we did in fact collide
@@ -762,7 +819,6 @@ right_paddle_area_check_done:
 
 BALL_RIGHT_PADDLE_COLLIS:
 	;; first: is right side of ball reaching the paddle yet?
-	INC $0100
 	LDA ball_x
 	CLC
 	ADC #BALL_DIAMETER	; get right side
@@ -770,38 +826,61 @@ BALL_RIGHT_PADDLE_COLLIS:
 	JSR RIGHT_PADDLE_AREA_CHECK
 	BEQ no_right_paddle_collis
 
-	;; create remainder
-	TXA			; retrieve right side of ball
-	SEC
-	SBC #PADDLE_2_X
-	STA ball_remndr_x
+	;; collision definitely happened
+	;; are we going to count it as vertical or horizontal?
+
+	;; if ball has no y speed then ball_up/down will throw off ball
+	;; adjustment, so we check speed here
+	LDA ball_speed_y
+	BNE right_paddle_test_eject
+	;; else place ball on right side of paddle and assume horiz collis
 	LDA #PADDLE_2_X
 	SEC
 	SBC #BALL_DIAMETER
-	STA ball_x		; make ball flush with right paddle
-
-	LDA ball_speed_y
-	CMP ball_remndr_x
-	BCC right_paddle_correction_done
-	LDA ball_up
-	BEQ right_paddle_down_correction
-	;; else ball is going up, correct y down a bit
-	LDA ball_y
+	STA ball_x
+	JMP right_paddle_horiz_collis
+right_paddle_test_eject:
+	TXA			; retrieve right side of ball
+	CMP #PADDLE_2_X
+	BEQ right_paddle_horiz_collis
+	LDA paddle_2_top
 	CLC
-	ADC ball_remndr_x
-	STA ball_y
-	JMP right_paddle_correction_done
-
-right_paddle_down_correction:
-	;; ball is going down, correct y up a bit
-	LDA ball_y
+	ADC #PADDLE_LEN
+	CMP ball_y
+	BEQ right_paddle_bot_collis
+	LDA paddle_2_top
 	SEC
-	SBC ball_remndr_x
-	STA ball_y
+	SBC #BALL_DIAMETER
+	CMP ball_y
+	BEQ right_paddle_top_collis
 
+	;; if none of above conditions are met, we readjust the ball
+	;; then loop back up to try again
+right_paddle_ball_eject:
+	DEC ball_x
 
-right_paddle_correction_done:
-	;; now decide on angle reflection
+	LDA ball_up
+	BEQ right_paddle_eject_up
+	;; else ball was moving up and we should eject downward
+	INC ball_y
+	JMP right_paddle_test_eject
+right_paddle_eject_up:
+	DEC ball_y
+
+	;; else no hit, do another loop
+	JMP right_paddle_test_eject
+
+right_paddle_bot_collis:
+	LDA #$00
+	STA ball_up
+	JMP no_right_paddle_collis
+
+right_paddle_top_collis:
+	LDA #$01
+	STA ball_up
+	JMP no_right_paddle_collis
+
+right_paddle_horiz_collis:
 	LDA paddle_2_top
 	CLC
 	ADC #PADDLE_LEN
@@ -810,7 +889,7 @@ right_paddle_correction_done:
 	;; if ball hits riiight on the bottom of the paddle then
 	;; this actually ends up underflowing and breaks, so we just
 	;; manually manipulate so it takes the desired angle
-	BCS right_paddle_normal_collis
+	BNE right_paddle_normal_collis
 	LDA #$01
 
 right_paddle_normal_collis:
@@ -818,17 +897,16 @@ right_paddle_normal_collis:
 	SBC #$01
 	ASL
 	TAX
-	LDA angle_table, X
+	LDA horiz_angle_table, X
 	STA pointerLo
 	INX
-	LDA angle_table, X
+	LDA horiz_angle_table, X
 	STA pointerHi
-right_paddle_set_angle:
-	JSR ANGLE_SET
+	JSR HORIZ_ANGLE_SET
 
-right_paddle_collis_done:
 	LDA #$01
 	STA ball_left
+
 no_right_paddle_collis:
 	RTS
 ;;; END OF RIGHT_PADDLE_COLLIS ;;;
@@ -997,8 +1075,7 @@ insideloop:
 	LDA #BALL_START_SPD_X
 	STA ball_speed_x
 	LDA #BALL_START_FRACX
-	STA ball_frac_x
-	STA ball_frac_x_mx
+	STA ball_frac_dx
 
 	LDA #$00
 	STA ball_up
@@ -1018,9 +1095,11 @@ insideloop:
 	STA frame_counter
 	STA gen_counter
 	STA ball_frac_x
+	STA ball_frac_dx
 	STA ball_remndr_x
 	STA ball_speed_y
 	STA ball_frac_y
+	STA ball_frac_dy
 	STA ball_remndr_y
 	STA p1_score_MSB
 	STA p1_score_LSB
@@ -1033,7 +1112,7 @@ insideloop:
 	STA cursor_y
 
 	;; uncomment for quick start/debug mode
-	;; .include "debug.asm"
+	.include "debug.asm"
 
 	JMP TITLE_SCREEN
 	.include "title_screen.asm"
@@ -1142,6 +1221,8 @@ ball_vert_move_done:
 	BEQ player_2_score
 	BCC player_2_score
 
+	;; CMP #$0F
+	;; BCC ball_horiz_move_done
 	;; then check for left side paddle collis
 	JSR BALL_LEFT_PADDLE_COLLIS
 
@@ -1451,26 +1532,25 @@ attributes:  ; 8 x 8 = 64 bytes
 	.byte %00000101, %00000101, %00000101, %00000101
 	.byte %00000101, %00000101, %00000101, %00000101
 
-angle_table:
-	.word paddle_angle_one_down
-	.word paddle_angle_one_down
-	.word paddle_angle_two_down
-	.word paddle_angle_two_down
-	.word paddle_angle_three_down
-	.word paddle_angle_three_down
+horiz_angle_table:
 	.word paddle_angle_four_down
 	.word paddle_angle_four_down
-	.word paddle_angle_five
-	.word paddle_angle_five
-	.word paddle_angle_five
-	.word paddle_angle_four_up
-	.word paddle_angle_four_up
-	.word paddle_angle_three_up
-	.word paddle_angle_three_up
-	.word paddle_angle_two_up
-	.word paddle_angle_two_up
+	.word paddle_angle_three_down
+	.word paddle_angle_three_down
+	.word paddle_angle_two_down
+	.word paddle_angle_two_down
+	.word paddle_angle_one_down
+	.word paddle_angle_one_down
+	.word paddle_angle_zero
+	.word paddle_angle_zero
+	.word paddle_angle_zero
 	.word paddle_angle_one_up
 	.word paddle_angle_one_up
-	.word paddle_angle_one_up ; need an extra entry here for when the ball
+	.word paddle_angle_two_up
+	.word paddle_angle_two_up
+	.word paddle_angle_three_up
+	.word paddle_angle_three_up
+	.word paddle_angle_four_up
+	.word paddle_angle_four_up
+	.word paddle_angle_four_up ; need an extra entry here for when the ball
 				  ; hits on top of the paddle
-	;; .word $0000
