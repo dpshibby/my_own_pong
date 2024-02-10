@@ -95,11 +95,10 @@ bot_line_loop2:
 DEBUG_RESET:
 	;; reset ball
 	LDA #BALL_START_X
-	LDA #$E8
+	LDA #$40
 	STA ball_x
 	LDA #BALL_START_Y
-	;; LDA #$60
-	LDA #$8D
+	LDA #$8F
 ;;;;;; Current angles, tested ;;;;;;
 ;;; 7F, 7E = sharp down
 ;;; 7D, 7C = mostly down
@@ -114,12 +113,9 @@ DEBUG_RESET:
 	STA ball_y
 	LDA #$01
 	STA ball_up
-	LDA #$00
-	STA ball_left
 	LDA #$01
-	STA ball_speed_x
-	LDA #$02
-	STA ball_speed_y
+	STA ball_left
+	JSR SET_ANGLE_FOUR
 
 	;; reset paddles
 	LDA #PADDLE_START_Y
