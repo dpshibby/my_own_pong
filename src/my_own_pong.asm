@@ -22,6 +22,9 @@ serving:	.res 1		; 0 for p1, 1 for p2
 				; this variable is also used to check which
 				; player scored, 1 for p1, 0 for p2
 
+win_score_MSB:	.res 1
+win_score_LSB:	.res 1
+
 ctrl_input_1:	.res 1
 ctrl_input_2:	.res 1
 
@@ -46,6 +49,7 @@ ball_remndr_y:	.res 1
 
 cursor_y:	.res 1
 cursor_up:	.res 1
+selected_option:.res 1
 
 frame_counter:	.res 1
 gen_counter:	.res 1
@@ -54,6 +58,8 @@ anim_speed:	.res 1
 waiting:	.res 1
 need_nmt:	.res 1
 nmt_len:	.res 1
+soft_ppumask:	.res 1
+need_ppureg:	.res 1
 
 	.segment "BSS"
 nmt_buffer:	.res 256
@@ -127,6 +133,17 @@ nmt_update_finish:
 	STA need_nmt
 	STA nmt_len
 no_nmt:
+
+	LDA need_ppureg
+	BEQ no_ppureg
+	;; else update ppu registers
+	LDA soft_ppumask
+	STA PPUMASK
+
+	LDA #$00
+	STA need_ppureg
+
+no_ppureg:
 
 	;; disable scrolling
 	LDA #$00
@@ -977,14 +994,6 @@ DRAW_SCORE:
 	STA nmt_buffer, Y
 	INY
 
-	LDA #$00
-	STA nmt_buffer, Y
-	INY
-	STY nmt_len
-
-	LDA #$01
-	STA need_nmt
-
 	RTS
 ;;; END OF DRAW_SCORE ;;;
 
@@ -1021,6 +1030,8 @@ load_palette:
 	BNE load_palette
 	;; finished loading palettes
 
+	;; NB: This reads all the default bg tiles written at the bottom of
+	;; this file, but also the nametable data!
 loadbackground:
 	LDA PPUSTATUS		; read PPU status to reset the high/low latch
 	LDA #$20
@@ -1105,21 +1116,43 @@ insideloop:
 	STA p1_score_LSB
 	STA p2_score_MSB
 	STA p2_score_LSB
+	STA win_score_MSB
 	STA serving
+	STA soft_ppumask
+	STA need_ppureg
+	STA selected_option
+
 	LDA #$20
 	STA anim_speed
 	LDA #CURSOR_FIRST_POS
 	STA cursor_y
 
+	LDA #$05
+	STA win_score_LSB
+
 	;; uncomment for quick start/debug mode
-	.include "debug.asm"
+	;; .include "debug.asm"
 
 	JMP TITLE_SCREEN
 	.include "title_screen.asm"
 
-GAME_START:
+GAME_INIT:
 	;; draw the scoreboard here then begin the game
 	JSR DRAW_SCORE
+
+	LDA #$00
+	STA nmt_buffer, Y
+	STY nmt_len
+
+
+	LDA #$01
+	STA need_nmt
+
+	;; the additional frames are to prevent the ball from
+	;; immediately being served, can fix this later
+	;; with some input polling techniques
+	JSR WAIT_FRAME
+	JSR WAIT_FRAME
 	JSR WAIT_FRAME
 	JSR WAIT_FRAME
 	JSR WAIT_FRAME
@@ -1248,7 +1281,6 @@ ball_right:
 	CLC
 	ADC #BALL_DIAMETER	; get right side of ball
 	CMP #RIGHT_WALL
-;;; ;;;;; CHECK HERE ;;;;;;;;;;;;;;;;;;;
 	BCS player_1_score
 
 	;; then check for right side paddle collis
@@ -1287,6 +1319,15 @@ p2_scored:
 
 score_end:
 	JSR DRAW_SCORE
+	
+	LDY nmt_len
+	LDA #$00
+	STA nmt_buffer, Y
+	STY nmt_len
+
+	LDA #$01
+	STA need_nmt
+
 	JSR COMMON_END
 	RTS
 
