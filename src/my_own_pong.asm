@@ -26,7 +26,11 @@ win_score_MSB:	.res 1
 win_score_LSB:	.res 1
 
 ctrl_input_1:	.res 1
+ctrl_prev_input_1:	.res 1
+ctrl_jp_input_1:	.res 1
 ctrl_input_2:	.res 1
+ctrl_prev_input_2:	.res 1
+ctrl_jp_input_2:	.res 1
 
 paddle_1_top:	.res 1
 paddle_2_top:	.res 1
@@ -219,6 +223,13 @@ vblankwait2:			; wait for second vblank
 ;;; MAIN function subroutines ;;;
 
 GET_PLAYER_INPUT:
+	;; first store previous frame's inputs
+	LDA ctrl_input_1
+	STA ctrl_prev_input_1
+	LDA ctrl_input_2
+	STA ctrl_prev_input_2
+
+	;; now get new data
 	LDA #$01
 	STA CONTROLLER_1
 	STA ctrl_input_1
@@ -235,6 +246,18 @@ get_buttons:
 	ROL ctrl_input_2
 
 	BCC get_buttons
+
+	;; now we find the inputs that were just pressed this frame
+	LDA ctrl_prev_input_1
+	EOR #%11111111
+	AND ctrl_input_1
+	STA ctrl_jp_input_1
+
+	LDA ctrl_prev_input_2
+	EOR #%11111111
+	AND ctrl_input_2
+	STA ctrl_jp_input_2
+	
 
 	RTS
 ;;; END OF GET_PLAYER_INPUT ;;;
@@ -1148,13 +1171,6 @@ GAME_INIT:
 	LDA #$01
 	STA need_nmt
 
-	;; the additional frames are to prevent the ball from
-	;; immediately being served, can fix this later
-	;; with some input polling techniques
-	JSR WAIT_FRAME
-	JSR WAIT_FRAME
-	JSR WAIT_FRAME
-	JSR WAIT_FRAME
 	JSR WAIT_FRAME
 
 GAME_LOOP:
@@ -1183,9 +1199,12 @@ SERVE:
 	STA ball_x
 
 	;; now check if the player pressed A to serve
-	LDA ctrl_input_1
+	;; if A not pressed, move on
+	LDA ctrl_jp_input_1
 	AND #BTN_A
 	BEQ serve_done
+
+	;; new A press detected, serve ball
 	LDA #$00
 	STA ball_up
 	STA ball_left
@@ -1204,12 +1223,16 @@ p2_serve:
 	STA ball_x
 
 	;; now check if the player pressed A to serve
-	LDA ctrl_input_2
+	;; if A not pressed, move on
+	LDA ctrl_jp_input_2
 	AND #BTN_A
 	BEQ serve_done
+
+	;; new A press detected, serve ball
 	LDA #$01
 	STA ball_up
 	STA ball_left
+
 	RTS
 
 serve_done:
