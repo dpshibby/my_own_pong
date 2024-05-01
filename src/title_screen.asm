@@ -583,21 +583,12 @@ TITLE_SCREEN_MENU:
 	LDA #$01
 	STA need_nmt
 
-	;; now draw cursor sprite
-	LDA cursor_y
-	STA $0200
-
-	LDA #$00
-	STA $0201
-	STA $0202
-	LDA #CURSOR_X
-	STA $0203
 
 	;; fall through to TITLE_SCREEN_MENU_LOOP
 
 TITLE_SCREEN_MENU_LOOP:
 	JSR GET_PLAYER_INPUT
-	LDX ctrl_input_1
+	LDX ctrl_jp_input_1
 	TXA
 	AND #BTN_B
 	BNE back_to_title
@@ -759,10 +750,11 @@ OPTIONS_MENU:
 
 	JSR WAIT_FRAME
 
+	;; fall through to OPTIONS_MENU_LOOP
 
 OPTIONS_MENU_LOOP:
 	JSR GET_PLAYER_INPUT
-	LDX ctrl_input_1
+	LDX ctrl_jp_input_1
 	TXA
 	AND #BTN_B
 	BNE leave_options_menu
