@@ -10,40 +10,48 @@
 ;;; * Remember to draw the left/right arrows on entry into the options menu or
 ;;;   else it doesn't show up until you press down
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	
+
 	;; Title Screen constants
 	MYOWN_MSB         = $21
 	MYOWN_LSB         = $8D
 	MYOWN_SIZE        = $06
+	MYOWN_I           = $00
 
 	PONG_TOP_MSB      = $21
 	PONG_TOP_LSB      = $CC
 	PONG_TOP_SIZE     = $08
-	
+	PONG_TOP_I        = $01
+
 	PONG_BOT_MSB      = $21
 	PONG_BOT_LSB      = $EC
 	PONG_BOT_SIZE     = $08
-	
+	PONG_BOT_I        = $02
+
 	PS_MSB            = $22
 	PS_LSB            = $EA
 	PS_SIZE           = $0C
+	PS_I              = $03
+
 
 	PLAY_MSB          = $22
 	PLAY_LSB          = $CF
 	PLAY_SIZE         = $04
+	PLAY_I            = $04
 
 	OPT_MSB           = $23
 	OPT_LSB           = $2F
 	OPT_SIZE          = $07
+	OPT_I             = $05
 
 	CURSOR_X          = $68
 	CURSOR_FIRST_POS  = $B1
 	CURSOR_SECOND_POS = $C9
 
 	;; Options menu constants
-	WIN_SCORE_TXT_MSB  = $20
-	WIN_SCORE_TXT_LSB  = $C5
-	WIN_SCORE_TXT_SIZE = $0C
+	WIN_SCORE_MSB  = $20
+	WIN_SCORE_LSB  = $C4
+	WIN_SCORE_SIZE = $0E
+	WIN_SCORE_I    = $06
 
 	WIN_SCORE_NUM_MSB  = $20
 	WIN_SCORE_NUM_LSB  = $D9
@@ -80,107 +88,59 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; TITLE_SCREEN function subroutines ;;;
 
+
+	;; WRITE_TXT expects the string index in A and will
+	;; clobber A
+WRITE_TXT:
+	ASL
+	TAX
+	LDA string_table, X
+	STA pointerLo
+	LDA string_table + 1, X
+	STA pointerHi
+
+	LDY #$00
+	LDX nmt_len
+	LDA (pointerLo), Y	; length
+	STA nmt_buffer, X
+	INY
+	INX
+	LDA (pointerLo), Y	; MSB destination
+	STA nmt_buffer, X
+	INY
+	INX
+	LDA (pointerLo), Y	; LSB destination
+	STA nmt_buffer, X
+	INY
+	INX
+
+get_txt_loop:
+	LDA (pointerLo), Y
+	BEQ write_txt_end
+	;; if not 0, store a tile into nmt_buffer
+	STA nmt_buffer, X
+	INY
+	INX
+	JMP get_txt_loop
+
+write_txt_end:
+	STX nmt_len
+	RTS
+;;; END OF WRITE_TXT ;;;
+
 DRAW_MYOWNPONG:
-	;; write "My Own"
-	LDY nmt_len
-	LDA #MYOWN_SIZE		; size
-	STA nmt_buffer, Y
-	INY
-	LDA #MYOWN_MSB		; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #MYOWN_LSB		; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$1C		; M
-	STA nmt_buffer, Y
-	INY
-	LDA #$28		; Y
-	STA nmt_buffer, Y
-	INY
-	LDA #$00		; space
-	STA nmt_buffer, Y
-	INY
-	LDA #$1E		; O
-	STA nmt_buffer, Y
-	INY
-	LDA #$26		; W
-	STA nmt_buffer, Y
-	INY
-	LDA #$1D		; N
-	STA nmt_buffer, Y
-	INY
+	;; first draw "MY OWN"
+	LDA #MYOWN_I 		; index
+	JSR WRITE_TXT
+	
+	;; draw top half of pong logo
+	LDA #PONG_TOP_I
+	JSR WRITE_TXT
 
-	;; write "PONG" in big letters
-	LDA #PONG_TOP_SIZE	; size
-	STA nmt_buffer, Y
-	INY
-	LDA #PONG_TOP_MSB	; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #PONG_TOP_LSB	; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$60
-	STA nmt_buffer, Y
-	INY
-	LDA #$61
-	STA nmt_buffer, Y
-	INY
-	LDA #$62
-	STA nmt_buffer, Y
-	INY
-	LDA #$63
-	STA nmt_buffer, Y
-	INY
-	LDA #$64
-	STA nmt_buffer, Y
-	INY
-	LDA #$65
-	STA nmt_buffer, Y
-	INY
-	LDA #$66
-	STA nmt_buffer, Y
-	INY
-	LDA #$67
-	STA nmt_buffer, Y
-	INY
+	;; now bottom half
+	LDA #PONG_BOT_I
+	JSR WRITE_TXT
 
-	LDA #PONG_BOT_SIZE	; size
-	STA nmt_buffer, Y
-	INY
-	LDA #PONG_BOT_MSB	; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #PONG_BOT_LSB	; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$70
-	STA nmt_buffer, Y
-	INY
-	LDA #$71
-	STA nmt_buffer, Y
-	INY
-	LDA #$72
-	STA nmt_buffer, Y
-	INY
-	LDA #$73
-	STA nmt_buffer, Y
-	INY
-	LDA #$74
-	STA nmt_buffer, Y
-	INY
-	LDA #$75
-	STA nmt_buffer, Y
-	INY
-	LDA #$76
-	STA nmt_buffer, Y
-	INY
-	LDA #$77
-	STA nmt_buffer, Y
-	INY
-
-	STY nmt_len
 	
 	RTS
 ;;; END OF DRAW_MYOWNPONG ;;;
@@ -188,54 +148,8 @@ DRAW_MYOWNPONG:
 
 DRAW_PRESS_START:
 	;; write "PRESS  START"
-	LDY nmt_len
-	LDA #PS_SIZE		; size
-	STA nmt_buffer, Y
-	INY
-	LDA #PS_MSB		; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #PS_LSB		; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$1F		; P
-	STA nmt_buffer, Y
-	INY
-	LDA #$21		; R
-	STA nmt_buffer, Y
-	INY
-	LDA #$14		; E
-	STA nmt_buffer, Y
-	INY
-	LDA #$22		; S
-	STA nmt_buffer, Y
-	INY
-	LDA #$22		; S
-	STA nmt_buffer, Y
-	INY
-	LDA #$00		; space
-	STA nmt_buffer, Y
-	INY
-	LDA #$00		; space
-	STA nmt_buffer, Y
-	INY
-	LDA #$22		; S
-	STA nmt_buffer, Y
-	INY
-	LDA #$23		; T
-	STA nmt_buffer, Y
-	INY
-	LDA #$10		; A
-	STA nmt_buffer, Y
-	INY
-	LDA #$21		; R
-	STA nmt_buffer, Y
-	INY
-	LDA #$23		; T
-	STA nmt_buffer, Y
-	INY
-
-	STY nmt_len
+	LDA #PS_I
+	JSR WRITE_TXT
 
 	RTS
 ;;; END OF DRAW_PRESS_START ;;;
@@ -243,62 +157,12 @@ DRAW_PRESS_START:
 
 DRAW_MENU:
 	;; write "PLAY"
-	LDY nmt_len
-	LDA #PLAY_SIZE		; size
-	STA nmt_buffer, Y
-	INY
-	LDA #PLAY_MSB		; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #PLAY_LSB		; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$1F		; P
-	STA nmt_buffer, Y
-	INY
-	LDA #$1B		; L
-	STA nmt_buffer, Y
-	INY
-	LDA #$10		; A
-	STA nmt_buffer, Y
-	INY
-	LDA #$28		; Y
-	STA nmt_buffer, Y
-	INY
+	LDA #PLAY_I
+	JSR WRITE_TXT
 
 	;; write "OPTIONS"
-	LDA #OPT_SIZE		; size
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_MSB		; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_LSB		; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$1E		; O
-	STA nmt_buffer, Y
-	INY
-	LDA #$1F		; P
-	STA nmt_buffer, Y
-	INY
-	LDA #$23		; T
-	STA nmt_buffer, Y
-	INY
-	LDA #$18		; I
-	STA nmt_buffer, Y
-	INY
-	LDA #$1E		; O
-	STA nmt_buffer, Y
-	INY
-	LDA #$1D		; N
-	STA nmt_buffer, Y
-	INY
-	LDA #$22		; S
-	STA nmt_buffer, Y
-	INY
-
-	STY nmt_len
+	LDA #OPT_I
+	JSR WRITE_TXT
 
 	;; erase "PRESS  START"
 	LDA #PS_LSB
@@ -310,53 +174,12 @@ DRAW_MENU:
 ;;; END OF DRAW_MENU ;;;
 
 DRAW_OPTIONS_MENU:
-	LDY nmt_len
-	LDA #WIN_SCORE_TXT_SIZE
-	STA nmt_buffer, Y
-	INY
-	LDA #WIN_SCORE_TXT_MSB	; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #WIN_SCORE_TXT_LSB	; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$22		; S
-	STA nmt_buffer, Y
-	INY
-	LDA #$12		; C
-	STA nmt_buffer, Y
-	INY
-	LDA #$1E		; O
-	STA nmt_buffer, Y
-	INY
-	LDA #$21		; R
-	STA nmt_buffer, Y
-	INY
-	LDA #$14		; E
-	STA nmt_buffer, Y
-	INY
-	LDA #$00		; space
-	STA nmt_buffer, Y
-	INY
-	LDA #$23		; T
-	STA nmt_buffer, Y
-	INY
-	LDA #$1E		; O
-	STA nmt_buffer, Y
-	INY
-	LDA #$00		; space
-	STA nmt_buffer, Y
-	INY
-	LDA #$26		; W
-	STA nmt_buffer, Y
-	INY
-	LDA #$18		; I
-	STA nmt_buffer, Y
-	INY
-	LDA #$1D		; N
-	STA nmt_buffer, Y
-	INY
+	;; first option, score to win
+	JSR WAIT_FRAME
+	LDA #WIN_SCORE_I
+	JSR WRITE_TXT
 
+	LDY nmt_len
 	LDA #WIN_SCORE_NUM_SIZE
 	STA nmt_buffer, Y
 	INY
@@ -425,31 +248,6 @@ DRAW_OPTIONS_MENU:
 	STA nmt_buffer, Y
 	INY	
 
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_LARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_LARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$30		; left arrow
-	STA nmt_buffer, Y
-	INY
-	
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_RARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_RARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$31		; right arrow
-	STA nmt_buffer, Y
-	INY
 
 	STY nmt_len
 
@@ -735,7 +533,6 @@ bot_line_loop:
 OPTIONS_MENU:
 	JSR DRAW_OPTIONS_MENU
 	
-	;; INC $0100
 	LDA #$00
 	STA nmt_buffer, Y
 
@@ -975,8 +772,6 @@ OPTION_SCORE_TO_WIN:
 	STY nmt_len
 	LDA #$01
 	STA need_nmt
-
-	INC $0100
 
 	JSR WAIT_FRAME
 
