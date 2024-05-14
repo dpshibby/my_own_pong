@@ -8,10 +8,10 @@ CHR_FILES=$(addprefix src/, pong_background.chr pong_sprites.chr)
 all: $(GAME).nes
 
 $(GAME).nes: $(GAME).o nes.cfg
-	$(LINKER) -o $(GAME).nes -C nes.cfg $(GAME).o
+	$(LINKER) -o $(GAME).nes -C nes.cfg --dbgfile my_own_pong.dbg $(GAME).o
 
 $(GAME).o: src/$(GAME).asm $(INC_FILES) $(CHR_FILES)
-	$(ASSEMBLER) src/$(GAME).asm -o $(GAME).o
+	$(ASSEMBLER) -g src/$(GAME).asm -o $(GAME).o
 
 clean:
 	rm -f $(GAME).o

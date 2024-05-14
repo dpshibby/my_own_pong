@@ -11,49 +11,61 @@
 	.addr 0		; IRQ unused
 
 	.segment "ZEROPAGE"
-pointerLo:	.res 1		; pointer vars for 2byte addr
-pointerHi:	.res 1
+pointerLo:	   .res 1	; pointer vars for 2byte addr
+pointerHi:	   .res 1
 
-p1_score_MSB:	.res 1
-p1_score_LSB:	.res 1
-p2_score_MSB:	.res 1
-p2_score_LSB:	.res 1
-serving:	.res 1		; 0 for p1, 1 for p2
+p1_score_MSB:	   .res 1
+p1_score_LSB:	   .res 1
+p2_score_MSB:	   .res 1
+p2_score_LSB:	   .res 1
+serving:	   .res 1	; 0 for p1, 1 for p2
 				; this variable is also used to check which
 				; player scored, 1 for p1, 0 for p2
+game_over:	   .res 1	; 1 = p1 won, 2 = p2 won
 
-ctrl_input_1:	.res 1
-ctrl_input_2:	.res 1
+win_score_MSB:	   .res 1
+win_score_LSB:	   .res 1
 
-paddle_1_top:	.res 1
-paddle_2_top:	.res 1
-paddle_speed:	.res 1
+ctrl_input_1:	   .res 1
+ctrl_prev_input_1: .res 1
+ctrl_jp_input_1:   .res 1	; jp = just pressed on this frame
+ctrl_input_2:      .res 1
+ctrl_prev_input_2: .res 1
+ctrl_jp_input_2:   .res 1
 
-ball_x:		.res 1
-ball_y:		.res 1
-ball_up:	.res 1		; 1 for up, 0 for down
-ball_left:	.res 1		; 1 for left, 0 for right
+paddle_1_top:	   .res 1
+paddle_2_top:	   .res 1
+paddle_speed:	   .res 1
 
-ball_speed_x:	.res 1
-ball_frac_x:	.res 1
-ball_frac_dx:	.res 1
-ball_remndr_x:	.res 1
+ball_x:		   .res 1
+ball_y:		   .res 1
+ball_up:	   .res 1	; 1 for up, 0 for down
+ball_left:	   .res 1	; 1 for left, 0 for right
 
-ball_speed_y:	.res 1
-ball_frac_y:	.res 1
-ball_frac_dy:	.res 1
-ball_remndr_y:	.res 1
+ball_speed_x:	   .res 1
+ball_frac_x:	   .res 1
+ball_frac_dx:	   .res 1
+ball_remndr_x:	   .res 1
 
-cursor_y:	.res 1
-cursor_up:	.res 1
+ball_speed_y:	   .res 1
+ball_frac_y:	   .res 1
+ball_frac_dy:	   .res 1
+ball_remndr_y:	   .res 1
 
-frame_counter:	.res 1
-gen_counter:	.res 1
-anim_speed:	.res 1
+cursor_y:	   .res 1
+cursor_up:	   .res 1
+selected_option:   .res 1
+select_type:	   .res 1
 
-waiting:	.res 1
-need_nmt:	.res 1
-nmt_len:	.res 1
+frame_counter:	   .res 1
+gen_counter:	   .res 1
+anim_speed:	   .res 1
+
+waiting:	   .res 1
+need_nmt:	   .res 1
+nmt_len:	   .res 1
+soft_ppumask:	   .res 1
+need_ppureg:	   .res 1
 
 	.segment "BSS"
 nmt_buffer:	.res 256
@@ -72,7 +84,7 @@ palette_buffer:	.res 32
 	PADDLE_LEN       = $10
 
 	BALL_START_X     = $80
-	BALL_START_Y     = $50
+	BALL_START_Y     = $FF
 	BALL_DIAMETER    = $04
 	BALL_START_SPD_X = $02
 	BALL_START_FRACX = $02
@@ -91,6 +103,8 @@ NMI:
 	TYA
 	PHA
 
+	LDA #$01
+	STA $0A
 	;; setup and do DMA from addr $0200
 	LDA #$00
 	STA OAMADDR
@@ -127,6 +141,17 @@ nmt_update_finish:
 	STA need_nmt
 	STA nmt_len
 no_nmt:
+
+	LDA need_ppureg
+	BEQ no_ppureg
+	;; else update ppu registers
+	LDA soft_ppumask
+	STA PPUMASK
+
+	LDA #$00
+	STA need_ppureg
+
+no_ppureg:
 
 	;; disable scrolling
 	LDA #$00
@@ -202,6 +227,13 @@ vblankwait2:			; wait for second vblank
 ;;; MAIN function subroutines ;;;
 
 GET_PLAYER_INPUT:
+	;; first store previous frame's inputs
+	LDA ctrl_input_1
+	STA ctrl_prev_input_1
+	LDA ctrl_input_2
+	STA ctrl_prev_input_2
+
+	;; now get new data
 	LDA #$01
 	STA CONTROLLER_1
 	STA ctrl_input_1
@@ -218,6 +250,18 @@ get_buttons:
 	ROL ctrl_input_2
 
 	BCC get_buttons
+
+	;; now we find the inputs that were just pressed this frame
+	LDA ctrl_prev_input_1
+	EOR #%11111111
+	AND ctrl_input_1
+	STA ctrl_jp_input_1
+
+	LDA ctrl_prev_input_2
+	EOR #%11111111
+	AND ctrl_input_2
+	STA ctrl_jp_input_2
+	
 
 	RTS
 ;;; END OF GET_PLAYER_INPUT ;;;
@@ -977,13 +1021,7 @@ DRAW_SCORE:
 	STA nmt_buffer, Y
 	INY
 
-	LDA #$00
-	STA nmt_buffer, Y
-	INY
 	STY nmt_len
-
-	LDA #$01
-	STA need_nmt
 
 	RTS
 ;;; END OF DRAW_SCORE ;;;
@@ -1021,6 +1059,8 @@ load_palette:
 	BNE load_palette
 	;; finished loading palettes
 
+	;; NB: This reads all the default bg tiles written at the bottom of
+	;; this file, but also the nametable data!
 loadbackground:
 	LDA PPUSTATUS		; read PPU status to reset the high/low latch
 	LDA #$20
@@ -1105,29 +1145,47 @@ insideloop:
 	STA p1_score_LSB
 	STA p2_score_MSB
 	STA p2_score_LSB
+	STA game_over
+	STA win_score_MSB
 	STA serving
+	STA soft_ppumask
+	STA need_ppureg
+	STA selected_option
+	LDA #$02
+	STA select_type
+
 	LDA #$20
 	STA anim_speed
 	LDA #CURSOR_FIRST_POS
 	STA cursor_y
 
+	LDA #$05
+	STA win_score_LSB
+
 	;; uncomment for quick start/debug mode
-	.include "debug.asm"
+	;; .include "debug.asm"
 
 	JMP TITLE_SCREEN
 	.include "title_screen.asm"
 
-GAME_START:
+GAME_INIT:
 	;; draw the scoreboard here then begin the game
 	JSR DRAW_SCORE
-	JSR WAIT_FRAME
-	JSR WAIT_FRAME
-	JSR WAIT_FRAME
+
+	LDY nmt_len
+	LDA #$00
+	STA nmt_buffer, Y
+
+	LDA #$01
+	STA need_nmt
+
+	JSR COMMON_END
 
 GAME_LOOP:
 	JSR SERVE
 	JSR PLAY
 	JSR SCORE
+	JSR GAME_END_CHECK
 	JMP GAME_LOOP
 
 SERVE:
@@ -1150,9 +1208,12 @@ SERVE:
 	STA ball_x
 
 	;; now check if the player pressed A to serve
-	LDA ctrl_input_1
+	;; if A not pressed, move on
+	LDA ctrl_jp_input_1
 	AND #BTN_A
 	BEQ serve_done
+
+	;; new A press detected, serve ball
 	LDA #$00
 	STA ball_up
 	STA ball_left
@@ -1171,12 +1232,16 @@ p2_serve:
 	STA ball_x
 
 	;; now check if the player pressed A to serve
-	LDA ctrl_input_2
+	;; if A not pressed, move on
+	LDA ctrl_jp_input_2
 	AND #BTN_A
 	BEQ serve_done
+
+	;; new A press detected, serve ball
 	LDA #$01
 	STA ball_up
 	STA ball_left
+
 	RTS
 
 serve_done:
@@ -1248,7 +1313,6 @@ ball_right:
 	CLC
 	ADC #BALL_DIAMETER	; get right side of ball
 	CMP #RIGHT_WALL
-;;; ;;;;; CHECK HERE ;;;;;;;;;;;;;;;;;;;
 	BCS player_1_score
 
 	;; then check for right side paddle collis
@@ -1270,27 +1334,199 @@ SCORE:
 	INC p1_score_LSB
 	LDA p1_score_LSB
 	CMP #$0A
-	BNE score_end
+	BNE @game_end_test
 	INC p1_score_MSB
 	LDA #$00
 	STA p1_score_LSB
+	
+@game_end_test:
+	;; now check if game has ended
+	LDA p1_score_MSB
+	CMP win_score_MSB
+	BNE score_end
+	;; MSB is same, now try LSB
+	LDA p1_score_LSB
+	CMP win_score_LSB
+	BNE score_end
+	;; if both are the same, set game over val
+	LDA #$01
+	STA game_over
 	JMP score_end
 
 p2_scored:
 	INC p2_score_LSB
 	LDA p2_score_LSB
 	CMP #$0A
-	BNE score_end
+	BNE @game_end_test
 	INC p2_score_MSB
 	LDA #$00
 	STA p2_score_LSB
 
+@game_end_test:
+	;; now check if game has ended
+	LDA p2_score_MSB
+	CMP win_score_MSB
+	BNE score_end
+	;; MSB is same, now try LSB
+	LDA p2_score_LSB
+	CMP win_score_LSB
+	BNE score_end
+	;; if both are the same, set game over val
+	LDA #$01
+	STA game_over
+	;; fall through
+
 score_end:
 	JSR DRAW_SCORE
+	
+	LDA #$00
+	STA nmt_buffer, Y
+	STY nmt_len
+
+	LDA #$01
+	STA need_nmt
+
 	JSR COMMON_END
 	RTS
+;;; END OF SCORE ;;;
+
+GAME_END_CHECK:
+	LDA game_over
+	BEQ game_not_over	; branch if game is still going
+	;; else display win message
+	LDA #$00
+	STA $00
+	STA $01
+	LDA serving
+	BEQ p2_wins
+	;; else p1 wins
+	LDA #P1_WIN_I
+	JMP display_game_over
+
+game_not_over:
+	RTS
+
+p2_wins:
+	LDA #P2_WIN_I
+	JMP display_game_over
+
+display_game_over:
+	JSR WRITE_TXT
+	;; load options for replay/quit
+	LDA #PLAY_AG_I
+	JSR WRITE_TXT
+
+	LDA #QUIT_I
+	JSR WRITE_TXT
+
+	LDY nmt_len
+	LDA #$00
+	STA nmt_buffer, Y
+	LDA #$01
+	STA need_nmt
+
+	LDA #CURSOR_FIRST_POS
+	STA cursor_y
+	
+GAME_END_CHECK_LOOP:
+	JSR GET_PLAYER_INPUT
+	LDX ctrl_jp_input_1
+	TXA
+	AND #BTN_A
+	BNE game_end_select
+	TXA
+	AND #BTN_UP
+	BNE move_up_ge
+	TXA
+	AND #BTN_DOWN
+	BNE move_down_ge
+
+	
+
+GAME_END_CHECK_LOOP_END:
+	JSR COMMON_END
+	JMP GAME_END_CHECK_LOOP
+
+move_up_ge:
+	LDA #CURSOR_FIRST_POS
+	STA cursor_y
+	JMP GAME_END_CHECK_LOOP_END
+
+move_down_ge:
+	LDA #CURSOR_SECOND_POS
+	STA cursor_y
+	JMP GAME_END_CHECK_LOOP_END
+
+game_end_select:
+	LDA cursor_y
+	CMP #CURSOR_SECOND_POS
+	BNE reset_game
+	;; else we go back to the title screen
+	;; fall through
+	
+	;; at some point this should send us back to the title
+	;; screen while keeping our settings but for now this
+	;; is good enough
+back_to_start:
+	JMP RESET
+
+reset_game:
+	;; set up initial for paddles etc again
+	LDA #PADDLE_START_Y
+	STA paddle_1_top
+
+	LDA #PADDLE_START_Y
+	STA paddle_2_top
+
+	LDA #BALL_START_SPD_X
+	STA ball_speed_x
+	LDA #BALL_START_FRACX
+	STA ball_frac_dx
+
+	LDA #$00
+	STA ball_up
+	STA ball_left
+
+	STA p1_score_LSB
+	STA p1_score_MSB
+	STA p2_score_LSB
+	STA p2_score_MSB
+
+	STA game_over
+
+	
+	LDA #WINNER_LSB
+	LDY #WINNER_MSB
+	LDX #WINNER_SIZE
+	JSR STRIKEOUT
+
+	LDA #PLAY_AG_LSB
+	LDY #PLAY_AG_MSB
+	LDX #PLAY_AG_SIZE
+	JSR STRIKEOUT
+
+	LDA #QUIT_LSB
+	LDY #QUIT_MSB
+	LDX #QUIT_SIZE
+	JSR STRIKEOUT
 
 
+	JSR DRAW_SCORE
+	LDA #$00
+	STA nmt_buffer, Y
+	LDA #$01
+	STA need_nmt
+
+	;; hide cursor before game
+	LDA #$FF
+	STA cursor_y
+	
+	JSR COMMON_END
+	
+	;; go back to SERVE
+	RTS
+	
+	
 	;; Handle all the sprite drawing for each frame
 	;; then burn cycles until next frame
 COMMON_END:
@@ -1369,6 +1605,9 @@ COMMON_END:
 	;; don't think this is necessary because X doesn't change
 	LDA #PADDLE_2_X
 	STA $0213
+
+	LDA cursor_y
+	STA $0214
 
 	;; here we just spin until NMI finishes so we only do all the
 	;; actions in the main loop once per frame
