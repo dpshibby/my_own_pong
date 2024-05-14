@@ -866,7 +866,6 @@ BALL_RIGHT_PADDLE_COLLIS:
 	LDA ball_x
 	CLC
 	ADC #BALL_DIAMETER	; get right side
-	TAX			; save right side in X
 	JSR RIGHT_PADDLE_AREA_CHECK
 	BEQ no_right_paddle_collis
 
@@ -877,14 +876,16 @@ BALL_RIGHT_PADDLE_COLLIS:
 	;; adjustment, so we check speed here
 	LDA ball_speed_y
 	BNE right_paddle_test_eject
-	;; else place ball on right side of paddle and assume horiz collis
+	;; else place ball on left side of paddle and assume horiz collis
 	LDA #PADDLE_2_X
 	SEC
 	SBC #BALL_DIAMETER
 	STA ball_x
 	JMP right_paddle_horiz_collis
 right_paddle_test_eject:
-	TXA			; retrieve right side of ball
+	LDA ball_x
+	CLC
+	ADC #BALL_DIAMETER	; get right side
 	CMP #PADDLE_2_X
 	BEQ right_paddle_horiz_collis
 	LDA paddle_2_top
