@@ -50,16 +50,36 @@
 	.charmap '<', $30
 	.charmap '>', $31
 	.charmap ' ', $01
+	.charmap '0', $40
+	.charmap '1', $41
+	.charmap '2', $42
+	.charmap '3', $43
+	.charmap '4', $44
+	.charmap '5', $45
+	.charmap '6', $46
+	.charmap '7', $47
+	.charmap '8', $48
+	.charmap '9', $49
 	
 	.segment "RODATA"
 string_table:
+	;; title screen entries
 	.word my_own
 	.word pong_top
 	.word pong_bot
 	.word press_start
 	.word play
 	.word options
+	
+	;; option submenu entries
 	.word win_score
+	.word sample
+
+	;; entries for end of game/replay
+	.word p1_win
+	.word p2_win
+	.word play_again
+	.word quit
 my_own:
 	.byte MYOWN_SIZE, MYOWN_MSB, MYOWN_LSB, "MY OWN", 0
 pong_top:
@@ -75,4 +95,14 @@ play:
 options:
 	.byte OPT_SIZE, OPT_MSB, OPT_LSB, "OPTIONS", 0
 win_score:
-	.byte WIN_SCORE_SIZE, WIN_SCORE_MSB, WIN_SCORE_LSB, "<SCORE TO WIN>", 0
+	.byte WIN_SCORE_SIZE, WIN_SCORE_MSB, WIN_SCORE_LSB, "SCORE TO WIN", 0
+sample:
+	.byte SAMPLE_SIZE, SAMPLE_MSB, SAMPLE_LSB, "SAMPLE", 0
+p1_win:
+	.byte WINNER_SIZE, WINNER_MSB, WINNER_LSB, "P1  WINS", 0
+p2_win:
+	.byte WINNER_SIZE, WINNER_MSB, WINNER_LSB, "P2  WINS", 0
+play_again:
+	.byte PLAY_AG_SIZE, PLAY_AG_MSB, PLAY_AG_LSB, "PLAY AGAIN", 0
+quit:
+	.byte QUIT_SIZE, QUIT_MSB, QUIT_LSB, "QUIT", 0

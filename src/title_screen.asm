@@ -1,96 +1,158 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; TODO:
-;;; * Main menu is a function
-;;;  - Start Game returns then Game Loop is called
-;;;  - Options menu is its own function with a loop
-;;;    - Each option has a function that returns back into the Options menu loop
-;;;
-;;; * Actual menu is displaying now!
-;;; * Basic up/down movement works!
-;;; * Remember to draw the left/right arrows on entry into the options menu or
-;;;   else it doesn't show up until you press down
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 	;; Title Screen constants
-	MYOWN_MSB         = $21
-	MYOWN_LSB         = $8D
-	MYOWN_SIZE        = $06
-	MYOWN_I           = $00
+	MYOWN_MSB          = $21
+	MYOWN_LSB          = $8D
+	MYOWN_SIZE         = $06
+	MYOWN_I            = $00
 
-	PONG_TOP_MSB      = $21
-	PONG_TOP_LSB      = $CC
-	PONG_TOP_SIZE     = $08
-	PONG_TOP_I        = $01
+	PONG_TOP_MSB       = $21
+	PONG_TOP_LSB       = $CC
+	PONG_TOP_SIZE      = $08
+	PONG_TOP_I         = $01
 
-	PONG_BOT_MSB      = $21
-	PONG_BOT_LSB      = $EC
-	PONG_BOT_SIZE     = $08
-	PONG_BOT_I        = $02
+	PONG_BOT_MSB       = $21
+	PONG_BOT_LSB       = $EC
+	PONG_BOT_SIZE      = $08
+	PONG_BOT_I         = $02
 
-	PS_MSB            = $22
-	PS_LSB            = $EA
-	PS_SIZE           = $0C
-	PS_I              = $03
+	PS_MSB             = $22
+	PS_LSB             = $EA
+	PS_SIZE            = $0C
+	PS_I               = $03
 
+	PLAY_MSB           = $22
+	PLAY_LSB           = $CF
+	PLAY_SIZE          = $04
+	PLAY_I             = $04
 
-	PLAY_MSB          = $22
-	PLAY_LSB          = $CF
-	PLAY_SIZE         = $04
-	PLAY_I            = $04
+	OPT_MSB            = $23
+	OPT_LSB            = $2F
+	OPT_SIZE           = $07
+	OPT_I              = $05
 
-	OPT_MSB           = $23
-	OPT_LSB           = $2F
-	OPT_SIZE          = $07
-	OPT_I             = $05
-
-	CURSOR_X          = $68
-	CURSOR_FIRST_POS  = $B1
-	CURSOR_SECOND_POS = $C9
+	CURSOR_X           = $68
+	CURSOR_FIRST_POS   = $B1
+	CURSOR_SECOND_POS  = $C9
 
 	;; Options menu constants
-	WIN_SCORE_MSB  = $20
-	WIN_SCORE_LSB  = $C4
-	WIN_SCORE_SIZE = $0E
-	WIN_SCORE_I    = $06
+	WIN_SCORE_MSB      = $20
+	WIN_SCORE_LSB      = $C5
+	WIN_SCORE_SIZE     = $0C
+	WIN_SCORE_I        = $06
 
 	WIN_SCORE_NUM_MSB  = $20
 	WIN_SCORE_NUM_LSB  = $D9
 	WIN_SCORE_NUM_SIZE = $02
 
-	SAMPLE_TXT_MSB     = $21
-	SAMPLE_TXT_LSB     = $05
-	SAMPLE_TXT_SIZE    = $06
+	SAMPLE_MSB         = $21
+	SAMPLE_LSB         = $05
+	SAMPLE_SIZE        = $06
+	SAMPLE_I           = $07
 
 	SAMPLE_NUM_MSB     = $21
 	SAMPLE_NUM_LSB     = $19
 	SAMPLE_NUM_SIZE    = $02
 
-	;; Arrow constants
-	OPT_ONE_LARROW_MSB = $20
-	OPT_ONE_LARROW_LSB = $C4
+	WINNER_MSB         = $21
+	WINNER_LSB         = $8C
+	WINNER_SIZE        = $08
+	P1_WIN_I           = $08
+	P2_WIN_I           = $09
 
-	OPT_ONE_RARROW_MSB = $20
-	OPT_ONE_RARROW_LSB = $D1
+	PLAY_AG_MSB        = $22
+	PLAY_AG_LSB        = $CF
+	PLAY_AG_SIZE       = $0A
+	PLAY_AG_I          = $0A
 
-	OPT_ONE_NUM_LARROW_MSB = $20
-	OPT_ONE_NUM_LARROW_LSB = $D8
-
-	OPT_ONE_NUM_RARROW_MSB = $20
-	OPT_ONE_NUM_RARROW_LSB = $DB
-
-	OPT_TWO_LARROW_MSB = $21
-	OPT_TWO_LARROW_LSB = $04
-
-	OPT_TWO_RARROW_MSB = $21
-	OPT_TWO_RARROW_LSB = $0B
+	QUIT_MSB           = $23
+	QUIT_LSB           = $2F
+	QUIT_SIZE          = $04
+	QUIT_I             = $0B
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; TITLE_SCREEN function subroutines ;;;
 
+	;; $01 == 0 for not selected,
+	;; $01 == 1 for num selected,
+	;; $01 == 2 for text selected
+DRAW_SCORE_OPT:
+	LDA $01
+	CMP #$01
+	BEQ @num_selected
+	;; if num is not selected, can call the
+	;; text portion as-is
+	LDA #WIN_SCORE_I
+	JSR WRITE_TXT
+	LDA #$00		; num not selected
+	STA $01
+	JMP @draw_num
+
+@num_selected:
+	LDA #$00		; text not selected
+	STA $01
+	LDA #WIN_SCORE_I
+	JSR WRITE_TXT
+	LDA #$01
+	STA $01
+@draw_num:
+	LDA #$02		; restore this since WRITE_TXT changes it
+	STA $00
+	LDA #WIN_SCORE_NUM_MSB
+	STA $02
+	LDA #WIN_SCORE_NUM_LSB
+	STA $03
+	LDA win_score_MSB
+	STA $04
+	LDA win_score_LSB
+	STA $05
+	JSR WRITE_NUMS
+
+;; draw_score_opt_end:
+	RTS
+;;; END OF DRAW_SCORE_OPT
+
+	;; $01 == 0 for not selected,
+	;; $01 == 1 for num selected,
+	;; $01 == 2 for text selected
+DRAW_SAMPLE_OPT:
+	LDA $01
+	CMP #$01
+	BEQ @num_selected
+	;; if num is not selected, can call the
+	;; text portion as-is
+	LDA #SAMPLE_I
+	JSR WRITE_TXT
+	LDA #$00		; num not selected
+	STA $01
+	JMP @draw_num
+
+@num_selected:
+	LDA #$00
+	STA $01
+	LDA #SAMPLE_I
+	JSR WRITE_TXT
+	LDA #$01
+	STA $01
+@draw_num:
+	LDA #$02		; restore this since WRITE_TXT changes it
+	STA $00
+	LDA #SAMPLE_NUM_MSB
+	STA $02
+	LDA #SAMPLE_NUM_LSB
+	STA $03
+	LDA #$03
+	STA $04
+	LDA #$00
+	STA $05
+	JSR WRITE_NUMS
+
+	RTS
+;;; END OF DRAW_SAMPLE_OPT
 
 	;; WRITE_TXT expects the string index in A and will
-	;; clobber A
+	;; clobber A, X, Y
+	;; $00 == 0 means non menu text, 2 means menu
+	;; option to draw arrows at addr $01
 WRITE_TXT:
 	ASL
 	TAX
@@ -102,37 +164,136 @@ WRITE_TXT:
 	LDY #$00
 	LDX nmt_len
 	LDA (pointerLo), Y	; length
+	CLC
+	ADC $00			; add $00 to len (can be 0 or 2)
 	STA nmt_buffer, X
+	LSR $00			; shift $00 right to halve it
 	INY
 	INX
+
 	LDA (pointerLo), Y	; MSB destination
 	STA nmt_buffer, X
 	INY
 	INX
 	LDA (pointerLo), Y	; LSB destination
+	SEC
+	SBC $00			; move destination back by $00 (0 or 1)
 	STA nmt_buffer, X
 	INY
 	INX
 
+	;; if we want arrows, insert left one here
+	LDA $00
+	BEQ get_txt_loop	; if not menu text, don't bother with this
+	LDA $01
+	BEQ @no_left_arrow
+	LDA #'<'
+	JMP @left_char_chosen
+
+@no_left_arrow:
+	LDA #' '
+@left_char_chosen:
+	STA nmt_buffer, X
+	INX
 get_txt_loop:
 	LDA (pointerLo), Y
-	BEQ write_txt_end
+	BEQ get_txt_loop_end
 	;; if not 0, store a tile into nmt_buffer
 	STA nmt_buffer, X
 	INY
 	INX
 	JMP get_txt_loop
 
+get_txt_loop_end:
+	;; if we want arrows, insert right one here
+	LDA $00
+	BEQ write_txt_end
+	LDA $01
+	BEQ @no_right_arrow
+	LDA #'>'
+	JMP @right_char_chosen
+
+@no_right_arrow:
+	LDA #' '
+@right_char_chosen:
+	STA nmt_buffer, X
+	INX
+
 write_txt_end:
 	STX nmt_len
 	RTS
 ;;; END OF WRITE_TXT ;;;
 
+	;; WRITE_NUMS assumes length 2
+	;; $00 == 0 for non menu 2 for menu
+	;; option to draw arrows in $01
+	;; gets addr MSB from $02 and LSB from $03
+	;; gets actual num MSB from $04 and LSB from $05
+	;; clobbers A, X, Y
+WRITE_NUMS:
+	LDX nmt_len
+	LDA #$02		; length default
+	CLC
+	ADC $00			; add what's in $00
+	STA nmt_buffer, X
+	LSR $00
+	INX
+	LDA $02			; get MSB where to print
+	STA nmt_buffer, X
+	INX
+
+	LDA $03			; get LSB where to print
+	SEC
+	SBC $00			; move back by what's in $00
+	STA nmt_buffer, X
+	INX
+
+	;; if we want left arrow, put it now
+	LDA $01
+	BEQ @no_left_arrow
+	LDA #'<'
+	JMP @no_left_arrow_done
+
+@no_left_arrow:
+	LDA #' '
+@no_left_arrow_done:
+	STA nmt_buffer, X
+	INX
+
+	;; now write MSB of number
+	LDA $04
+	CLC
+	ADC #$40		; num to tile offset
+	STA nmt_buffer, X
+	INX
+	LDA $05
+	CLC
+	ADC #$40		; num to tile offset
+	STA nmt_buffer, X
+	INX
+
+	;; now if we want right arrow, add it
+	LDA $01
+	BEQ @no_right_arrow
+	LDA #'>'
+	JMP @no_right_arrow_done
+
+@no_right_arrow:
+	LDA #' '
+@no_right_arrow_done:
+	STA nmt_buffer, X
+	INX
+
+write_nums_end:
+	STX nmt_len
+	RTS
+;;; END WRITE_NUMS ;;;
+
 DRAW_MYOWNPONG:
 	;; first draw "MY OWN"
 	LDA #MYOWN_I 		; index
 	JSR WRITE_TXT
-	
+
 	;; draw top half of pong logo
 	LDA #PONG_TOP_I
 	JSR WRITE_TXT
@@ -141,10 +302,10 @@ DRAW_MYOWNPONG:
 	LDA #PONG_BOT_I
 	JSR WRITE_TXT
 
-	
+
 	RTS
 ;;; END OF DRAW_MYOWNPONG ;;;
-	
+
 
 DRAW_PRESS_START:
 	;; write "PRESS  START"
@@ -175,81 +336,52 @@ DRAW_MENU:
 
 DRAW_OPTIONS_MENU:
 	;; first option, score to win
-	JSR WAIT_FRAME
-	LDA #WIN_SCORE_I
-	JSR WRITE_TXT
+	LDA #$02		; these are all menu text so put a 2 here
+	STA $00
+	LDX #$00
+	CPX selected_option
+	BNE @not_selected
+	;; else option selected is 0
+	LDA select_type
+	JMP store_first
 
-	LDY nmt_len
-	LDA #WIN_SCORE_NUM_SIZE
-	STA nmt_buffer, Y
-	INY
-	LDA #WIN_SCORE_NUM_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #WIN_SCORE_NUM_LSB
-	STA nmt_buffer, Y
-	INY
-	LDA win_score_MSB
-	CLC
-	ADC #$40
-	STA nmt_buffer, Y
-	INY
-	LDA win_score_LSB
-	CLC
-	ADC #$40
-	STA nmt_buffer, Y
-	INY	
-
-	LDA #SAMPLE_TXT_SIZE
-	STA nmt_buffer, Y
-	INY
-	LDA #SAMPLE_TXT_MSB	; addr MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #SAMPLE_TXT_LSB	; addr LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$22		; S
-	STA nmt_buffer, Y
-	INY
-	LDA #$10		; A
-	STA nmt_buffer, Y
-	INY
-	LDA #$1C		; M
-	STA nmt_buffer, Y
-	INY
-	LDA #$1F		; P
-	STA nmt_buffer, Y
-	INY
-	LDA #$1B		; L
-	STA nmt_buffer, Y
-	INY
-	LDA #$14		; E
-	STA nmt_buffer, Y
-	INY
-
-	LDA #SAMPLE_NUM_SIZE
-	STA nmt_buffer, Y
-	INY
-	LDA #SAMPLE_NUM_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #SAMPLE_NUM_LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$03
-	CLC
-	ADC #$40
-	STA nmt_buffer, Y
-	INY
+@not_selected:
 	LDA #$00
-	CLC
-	ADC #$40
-	STA nmt_buffer, Y
-	INY	
 
+store_first:
+	STA $01
+	TXA
+	PHA
+	JSR DRAW_SCORE_OPT
+	PLA
+	TAX
 
-	STY nmt_len
+	;; second option, the sample option
+	LDA #$02		; these are all menu text so put a 2 here
+	STA $00
+	INX
+	LDA selected_option
+	CPX selected_option
+	BNE @not_selected
+	;; else option selected is 1
+	LDA select_type
+	JMP store_second
+
+@not_selected:
+	LDA #$00
+
+store_second:
+	STA $01
+	TXA
+	PHA
+	JSR DRAW_SAMPLE_OPT
+	PLA
+	TAX
+
+	;; next option here
+	;; LDA #$02		; these are all menu text so put a 2 here
+	;; STA $00
+	;; INX
 
 	RTS
 ;;; END OF DRAW_OPTIONS_MENU ;;;
@@ -325,7 +457,7 @@ TITLE_SCREEN:
 
 	;; hide cursor
 	LDA #$FF
-	STA $0200
+	STA $0214
 	LDA #CURSOR_FIRST_POS
 	STA cursor_y
 
@@ -370,6 +502,7 @@ start_loop:
 
 TITLE_SCREEN_MENU:
 	;; draw Play Game and Options
+	JSR DRAW_MYOWNPONG
 	JSR DRAW_MENU
 
 	;; write 0 to finish
@@ -380,6 +513,7 @@ TITLE_SCREEN_MENU:
 	;; signal need to update background during NMI
 	LDA #$01
 	STA need_nmt
+
 
 
 	;; fall through to TITLE_SCREEN_MENU_LOOP
@@ -399,17 +533,17 @@ TITLE_SCREEN_MENU_LOOP:
 	TXA
 	AND #BTN_DOWN
 	BNE move_down
-	
+
 title_screen_menu_loop_end:
 	;; now draw cursor sprite
 	LDA cursor_y
-	STA $0200
+	STA $0214
 
 	LDA #$00
-	STA $0201
-	STA $0202
+	STA $0215
+	STA $0216
 	LDA #CURSOR_X
-	STA $0203
+	STA $0217
 
 	JSR WAIT_FRAME
 	JMP TITLE_SCREEN_MENU_LOOP
@@ -471,13 +605,12 @@ menu_select:
 	LDY nmt_len
 	LDA #$00
 	STA nmt_buffer, Y
-	STY nmt_len
 
 	LDA #$01
 	STA need_nmt
 
 	JSR WAIT_FRAME
-	
+
 	;; then act based on option selected
 	LDA cursor_y
 	CMP #CURSOR_SECOND_POS
@@ -528,11 +661,16 @@ bot_line_loop:
 
 	STY nmt_len
 
+	;; hide cursor
+	LDA #$FF
+	STA cursor_y
+
 	JMP GAME_INIT
 
 OPTIONS_MENU:
 	JSR DRAW_OPTIONS_MENU
-	
+
+	LDY nmt_len
 	LDA #$00
 	STA nmt_buffer, Y
 
@@ -541,11 +679,7 @@ OPTIONS_MENU:
 
 	;; hide cursor
 	LDA #$FF
-	STA $0200
-	LDA #CURSOR_FIRST_POS
-	STA cursor_y
-
-	JSR WAIT_FRAME
+	STA $0214
 
 	;; fall through to OPTIONS_MENU_LOOP
 
@@ -564,30 +698,44 @@ OPTIONS_MENU_LOOP:
 	TXA
 	AND #BTN_DOWN
 	BNE move_option_down
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Here we'll check for moving up/down to select an option and left/right
-;;; to adjust options
-;;; 
-;;; For now we just loop
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+	;; fall through
+OPTIONS_MENU_END:
 	JSR WAIT_FRAME
 	JMP OPTIONS_MENU_LOOP
 
 
 leave_options_menu:
-;;;;;;;;;;;;;;;;;; ERASE MENU OPTIONS BEFORE LEAVING ;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	LDA #$00
+	STA $00
+	STA $00
+	LDA #$00
+	STA selected_option
+	;; erase option 1
+	LDX #$17		; length of text plus num section
+	LDY #WIN_SCORE_MSB
+	LDA #WIN_SCORE_LSB
+	SEC
+	SBC #$01
+	JSR STRIKEOUT
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; NOTE:
-;;; Unless you press B in 1 frame and release then going back ends up
-;;; accidentally taking you all the way to the Title Screen because
-;;; the Title Menu you're supposed to go back to also checks for a B
-;;; press to go back to Title Screen
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	;; erase option 1
+	LDX #$17		; length of text plus num section
+	LDY #SAMPLE_MSB
+	LDA #SAMPLE_LSB
+	SEC
+	SBC #$01
+	JSR STRIKEOUT
+
+	LDY nmt_len
+	LDA #$00
+	STA nmt_buffer, Y
+	LDA #$01
+	STA need_nmt
+	JSR WAIT_FRAME
 
 	RTS
-	
+
 	;; When A is pressed, we enter the function that handles whatever
 	;; setting was being selected
 modify_setting:
@@ -598,185 +746,113 @@ modify_setting:
 
 select_option_1:
 	JSR OPTION_SCORE_TO_WIN
-	JMP OPTIONS_MENU_LOOP
-	
+	JMP OPTIONS_MENU
+
 move_option_up:
 	LDA selected_option
-	BEQ move_option_end
+	BEQ OPTIONS_MENU_END	; if option already 0, don't move
 	DEC selected_option
 	JMP move_option_apply
-	
+
 move_option_down:
 	LDA selected_option
-	CMP #$01 		; current num of options - 1, use a CONST later
-	BEQ move_option_end
+	CMP #$01		; current num of options - 1, use a CONST later
+	BEQ OPTIONS_MENU_END
 	INC selected_option
-	JMP move_option_apply
-
-move_option_end:
-	
-	JSR WAIT_FRAME
-	JMP OPTIONS_MENU_LOOP
+	;; JMP move_option_apply
+	;; fall through
 
 move_option_apply:
+
+	JSR DRAW_OPTIONS_MENU
 	LDA #$01
 	STA need_nmt
-
-	LDA selected_option
-	BNE hover_option_1
-	;; else option == 0
-	LDA #$00
-	PHA
-	PHA
-	LDA #$31
-	PHA
-	LDA #$30
-	PHA
-	JMP option_arrow_update
-
-hover_option_1:
-	LDA #$31
-	PHA
-	LDA #$30
-	PHA
-	LDA #$00
-	PHA
-	PHA
-
-option_arrow_update:
-	;; Option 1 left and right arrow
-	
-	LDY nmt_len
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_LARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_LARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	PLA			; get tile number from stack
-	STA nmt_buffer, Y
-	INY
-	
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_RARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_RARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	PLA			; get tile number from stack
-	STA nmt_buffer, Y
-	INY
-
-	;; Option 2 left and right arrow
-
-	LDA #$01 		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_TWO_LARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_TWO_LARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	PLA			; get tile number from stack
-	STA nmt_buffer, Y
-	INY
-
-	LDA #$01 		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_TWO_RARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_TWO_RARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	PLA			; get tile number from stack
-	STA nmt_buffer, Y
-	INY
-
-	
-	LDA #$00
-	STA nmt_buffer, Y
-	STY nmt_len
-
-	JMP move_option_end	
+	JMP OPTIONS_MENU_END
 
 ;;; END OF OPTIONS_MENU ;;;
 
+	;; This function can probably be re-written to be much more general
+	;; maybe by figuring out how to access the associated variables with
+	;; each menu option
 	;; Enter this function when the first option is chosen with A
 OPTION_SCORE_TO_WIN:
-	;; erase arrows around the option text
+	LDA #$01
+	STA select_type
+	JSR DRAW_OPTIONS_MENU
 	LDY nmt_len
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_LARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_LARROW_LSB
-	STA nmt_buffer, Y
-	INY
 	LDA #$00
 	STA nmt_buffer, Y
-	INY
-	
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_RARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_RARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$00
-	STA nmt_buffer, Y
-	INY
-	
-	;; draw the arrows around the numbers instead
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_NUM_LARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_NUM_LARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$30
-	STA nmt_buffer, Y
-	INY
-	
-	LDA #$01		; len 1
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_NUM_RARROW_MSB
-	STA nmt_buffer, Y
-	INY
-	LDA #OPT_ONE_NUM_RARROW_LSB
-	STA nmt_buffer, Y
-	INY
-	LDA #$31
-	STA nmt_buffer, Y
-	INY
-
-	LDA #$00
-	STA nmt_buffer, Y
-	STY nmt_len
 	LDA #$01
 	STA need_nmt
 
-	JSR WAIT_FRAME
-
 OPTION_SCORE_TO_WIN_LOOP:
+	JSR GET_PLAYER_INPUT
+	LDX ctrl_jp_input_1
+	TXA
+	AND #BTN_RIGHT
+	BNE @inc_setting
+	TXA
+	AND #BTN_LEFT
+	BNE @dec_setting
+	TXA
+	AND #BTN_B
+	BNE @leave_menu
+	JMP OPTION_SCORE_TO_WIN_END
 
+@inc_setting:
+	INC win_score_LSB
+	LDA win_score_LSB
+	CMP #$0A		; did LSB hit 10?
+	BNE @change_setting_end
+	;; if so, also inc MSB
+	INC win_score_MSB
+	LDA #$00
+	STA win_score_LSB
+	LDA win_score_MSB
+	CMP #$0A
+	BNE @change_setting_end
+	LDA #$09
+	STA win_score_LSB
+	STA win_score_MSB
+	JMP @change_setting_end
+
+@dec_setting:
+	DEC win_score_LSB
+	LDA win_score_MSB
+	CMP #$00
+	BNE @no_three_check      ; if not 0, do normal dec
+	;; if MSB is 0, don't let LSB go below 3
+	LDA win_score_LSB
+	CMP #$02		; lower than 3?
+	BNE @change_setting_end
+	;; if lower than 3, set back to 3
+	LDA #$03
+	STA win_score_LSB
+	JMP @change_setting_end
+
+@no_three_check:
+	LDA win_score_LSB
+	CMP #$FF		; wrapped to -1?
+	BNE @change_setting_end
+	;; if it did wrap, also dec MSB
+	DEC win_score_MSB
+	LDA #$09
+	STA win_score_LSB
+	JMP @change_setting_end
+
+@leave_menu:
+	LDA #$02
+	STA select_type
+	RTS
+
+@change_setting_end:
+	JSR DRAW_OPTIONS_MENU
+	LDY nmt_len
+	LDA #$00
+	STA nmt_buffer, Y
+	LDA #$01
+	STA need_nmt
+OPTION_SCORE_TO_WIN_END:
 	JSR WAIT_FRAME
 	JMP OPTION_SCORE_TO_WIN_LOOP
 
