@@ -1,14 +1,3 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; TODO:
-;;;
-;;; * need to get rid of all the things requiring ball movement vars
-;;;   - maybe replace with checks on sign of velocity?
-;;;   - check in top/bot collis check functions
-;;;
-;;; * Ball reflections on paddles at certain angles are super jank and can
-;;;   happen from inside the paddles
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-	
 	.include "header.asm"
 	.include "constants.asm"
 
@@ -48,16 +37,15 @@ paddle_1_int_y:	   .res 1
 paddle_1_frac_y:   .res 1
 paddle_1_int_dy:   .res 1
 paddle_1_frac_dy:  .res 1
-paddle_1_last_dir:   .res 1	; 1 = down/pos, -1 = up/neg
+paddle_1_int_dyy:  .res 1
+paddle_1_frac_dyy: .res 1
 
 paddle_2_int_y:	   .res 1
 paddle_2_frac_y:   .res 1
 paddle_2_int_dy:   .res 1
 paddle_2_frac_dy:  .res 1
-paddle_2_last_dir:   .res 1	; 1 = down/pos, -1 = up/neg
-
-	
-paddle_speed:	   .res 1
+paddle_2_int_dyy:  .res 1
+paddle_2_frac_dyy: .res 1
 
 ball_int_x:        .res 1
 ball_frac_x:	   .res 1
@@ -91,24 +79,26 @@ nmt_buffer:	.res 256
 palette_buffer:	.res 32
 
 	;; Game specific constants
-	TOP_WALL         = $07
-	RIGHT_WALL       = $FB
-	BOTTOM_WALL      = $E7
-	LEFT_WALL        = $04
+	TOP_WALL           = $07
+	RIGHT_WALL         = $FB
+	BOTTOM_WALL        = $E7
+	LEFT_WALL          = $04
 
-	PADDLE_1_X       = $0C
-	PADDLE_2_X       = $F0
-	PADDLE_START_Y   = $70
-	PADDLE_WIDTH     = $04
-	PADDLE_LEN       = $10
+	PADDLE_1_X         = $0C
+	PADDLE_2_X         = $F0
+	PADDLE_START_Y     = $70
+	PADDLE_WIDTH       = $04
+	PADDLE_LEN         = $10
+	PADDLE_INT_DY_MAX  = $03
+	PADDLE_FRAC_DY_MAX = $80
 
-	BALL_START_X     = $80
-	BALL_START_Y     = $FF
-	BALL_DIAMETER    = $04
-	BALL_START_SPD_X = $02
-	BALL_START_FRACX = $02
-	BALL_START_SPD_Y = $00
-	BALL_START_FRACY = $00
+	BALL_START_X       = $80
+	BALL_START_Y       = $FF
+	BALL_DIAMETER      = $04
+	BALL_START_SPD_X   = $02
+	BALL_START_FRACX   = $02
+	BALL_START_SPD_Y   = $00
+	BALL_START_FRACY   = $00
 
 	.segment "CODE"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -257,6 +247,49 @@ NEGATE:
 	SBC $01
 	STA $01
 	RTS
+;;; END OF NEGATE ;;;
+
+	;; this is for 16 bit values
+	;; If N1 is within range N2 return 0
+	;; $00 = low byte to check
+	;; $01 = high byte to check
+	;; $02 = low byte of num to compare with
+	;; $03 = high byte of num to compare with
+	;; N1 > N2 returns 1
+	;; N1 == N2 returns 0
+	;; N1 < N2 returns 0
+	;; So if N1 is < = N2 we return 0
+	;; return value is in A
+	;; thanks to the folks at codebase64.org :)
+RANGE_CHECK:
+	;; first convert N1 to absolute value
+	;; is N1 already pos?
+	LDA $01
+	BPL hi_byte_check
+	JSR NEGATE
+
+	;; fall through
+
+hi_byte_check:
+	LDA $01
+	CMP $03
+	BCC n1_lesser_or_eq     ; hiVal1 < hiVal2 --> Val1 < Val2
+	BNE n1_greater
+
+	;; high bytes are equal so check lower
+	LDA $00
+	CMP $02
+	BEQ n1_lesser_or_eq
+	BCS n1_greater		; loVal1 > = loVal2 --> Val1 > = Val2
+
+n1_lesser_or_eq:
+	LDA #$00
+	RTS
+n1_greater:
+	LDA #$01
+	RTS
+;;; END OF RANGE_CHECK ;;;
+
 
 GET_PLAYER_INPUT:
 	;; first store previous frame's inputs
@@ -293,7 +326,6 @@ get_buttons:
 	EOR #%11111111
 	AND ctrl_input_2
 	STA ctrl_jp_input_2
-	
 
 	RTS
 ;;; END OF GET_PLAYER_INPUT ;;;
@@ -301,47 +333,116 @@ get_buttons:
 	;; move the paddles based on controller input
 MOVE_PADDLES:
 	;; start of player 1 movement
+
+	LDA paddle_1_frac_dyy
+	STA $00
+	LDA paddle_1_int_dyy
+	STA $01
+
 	LDA ctrl_input_1
 	AND #BTN_UP
 	BNE paddle_1_up_press
 	LDA ctrl_input_1
 	AND #BTN_DOWN
 	BNE paddle_1_down_press
-	JMP paddle_1_move_done
+	;; nothing pressed? we should decel here
+	;; are we going up or down?
+	LDA paddle_1_int_dy
+	BPL @decel_sub
+	;; if dy is neg, we're moving up
+	;; decelerate by adding dyy
+	LDA paddle_1_frac_dy
+	CLC
+	ADC $00
+	STA paddle_1_frac_dy
 
-paddle_1_up_press:
-	LDA paddle_1_last_dir
-	CMP #$01		; CMP to pos 1
-	BEQ paddle_1_negate_vel
-	JMP paddle_1_move
+	LDA paddle_1_int_dy
+	ADC $01
+	STA paddle_1_int_dy
+	JMP @decel_range_check
 
-paddle_1_down_press:
-	LDA paddle_1_last_dir
-	CMP #$FF		; CMP to neg 1
-	BEQ paddle_1_negate_vel
-	JMP paddle_1_move
+@decel_sub:
+	SEC
+	LDA paddle_1_frac_dy
+	SBC $00
+	STA paddle_1_frac_dy
 
-paddle_1_negate_vel:
+	LDA paddle_1_int_dy
+	SBC $01
+	STA paddle_1_int_dy
+
+@decel_range_check:
 	LDA paddle_1_frac_dy
 	STA $00
 	LDA paddle_1_int_dy
 	STA $01
+
+	LDA paddle_1_frac_dyy
+	STA $02
+	LDA paddle_1_int_dyy
+	STA $03
+	JSR RANGE_CHECK
+	BNE paddle_1_apply_dy
+	;; if dy is close to 0 then clamp it to 0
+	LDA #$00
+	STA paddle_1_frac_dy
+	STA paddle_1_int_dy
+
+	JMP paddle_1_apply_dy
+
+paddle_1_up_press:
 	JSR NEGATE
+	JMP paddle_1_apply_dyy
+
+paddle_1_down_press:
+	;; fall through
+
+paddle_1_apply_dyy:
+	LDA paddle_1_frac_dy
+	CLC
+	ADC $00
+	STA paddle_1_frac_dy
+
+	LDA paddle_1_int_dy
+	ADC $01
+	STA paddle_1_int_dy
+
+	;; check if vel has gone over max val
+	LDA paddle_1_frac_dy
+	STA $00
+	LDA paddle_1_int_dy
+	STA $01
+
+	LDA #PADDLE_FRAC_DY_MAX
+	STA $02
+	LDA #PADDLE_INT_DY_MAX
+	STA $03
+	JSR RANGE_CHECK
+	BEQ paddle_1_apply_dy
+	;; if non zero returned then we were over max vel, must clamp
+	LDA #PADDLE_INT_DY_MAX
+	STA $01
+	LDA #PADDLE_FRAC_DY_MAX
+	STA $00
+	;; was our original vel pos or neg?
+	LDA paddle_1_int_dy
+	BPL @store_clamped_dy
+	;; if negative, negate the clamped val
+	JSR NEGATE
+
+	;; fall through
+
+	@store_clamped_dy:
 	LDA $00
 	STA paddle_1_frac_dy
 	LDA $01
 	STA paddle_1_int_dy
 
-	LDA #$00
-	SEC
-	SBC paddle_1_last_dir
-	STA paddle_1_last_dir
-
 	;; fall through
 
-paddle_1_move:
-	CLC
+paddle_1_apply_dy:
 	LDA paddle_1_frac_y
+	CLC
 	ADC paddle_1_frac_dy
 	STA paddle_1_frac_y
 
@@ -349,6 +450,8 @@ paddle_1_move:
 	ADC paddle_1_int_dy
 	STA paddle_1_int_y
 
+
+	;; floor/ceiling check
 	LDA paddle_1_int_dy
 	BPL paddle_1_floor_check
 	;; else check for ceiling collis
@@ -382,47 +485,115 @@ paddle_1_up_snap:
 paddle_1_move_done:
 
 	;; now for paddle 2
+	LDA paddle_2_frac_dyy
+	STA $00
+	LDA paddle_2_int_dyy
+	STA $01
+
 	LDA ctrl_input_2
 	AND #BTN_UP
 	BNE paddle_2_up_press
 	LDA ctrl_input_2
 	AND #BTN_DOWN
 	BNE paddle_2_down_press
-	JMP paddle_2_move_done
+	;; nothing pressed? we should decel here
+	;; are we going up or down?
+	LDA paddle_2_int_dy
+	BPL @decel_sub
+	;; if dy is neg, we're moving up
+	;; decelerate by adding dyy
+	LDA paddle_2_frac_dy
+	CLC
+	ADC $00
+	STA paddle_2_frac_dy
 
-paddle_2_up_press:
-	LDA paddle_2_last_dir
-	CMP #$01		; CMP to pos 1
-	BEQ paddle_2_negate_vel
-	JMP paddle_2_move
+	LDA paddle_2_int_dy
+	ADC $01
+	STA paddle_2_int_dy
+	JMP @decel_range_check
 
-paddle_2_down_press:
-	LDA paddle_2_last_dir
-	CMP #$FF		; CMP to neg 1
-	BEQ paddle_2_negate_vel
-	JMP paddle_2_move
+@decel_sub:
+	SEC
+	LDA paddle_2_frac_dy
+	SBC $00
+	STA paddle_2_frac_dy
 
-paddle_2_negate_vel:
+	LDA paddle_2_int_dy
+	SBC $01
+	STA paddle_2_int_dy
+
+@decel_range_check:
 	LDA paddle_2_frac_dy
 	STA $00
 	LDA paddle_2_int_dy
 	STA $01
+
+	LDA paddle_2_frac_dyy
+	STA $02
+	LDA paddle_2_int_dyy
+	STA $03
+	JSR RANGE_CHECK
+	BNE paddle_2_apply_dy
+	;; if dy is close to 0 then clamp it to 0
+	LDA #$00
+	STA paddle_2_frac_dy
+	STA paddle_2_int_dy
+
+	JMP paddle_2_apply_dy
+
+paddle_2_up_press:
 	JSR NEGATE
+	JMP paddle_2_apply_dyy
+
+paddle_2_down_press:
+	;; fall through
+
+paddle_2_apply_dyy:
+	LDA paddle_2_frac_dy
+	CLC
+	ADC $00
+	STA paddle_2_frac_dy
+
+	LDA paddle_2_int_dy
+	ADC $01
+	STA paddle_2_int_dy
+
+	;; check if vel has gone over max val
+	LDA paddle_2_frac_dy
+	STA $00
+	LDA paddle_2_int_dy
+	STA $01
+
+	LDA #PADDLE_FRAC_DY_MAX
+	STA $02
+	LDA #PADDLE_INT_DY_MAX
+	STA $03
+	JSR RANGE_CHECK
+	BEQ paddle_2_apply_dy
+	;; if non zero returned then we were over max vel, must clamp
+	LDA #PADDLE_INT_DY_MAX
+	STA $01
+	LDA #PADDLE_FRAC_DY_MAX
+	STA $00
+	;; was our original vel pos or neg?
+	LDA paddle_2_int_dy
+	BPL @store_clamped_dy
+	;; if negative, negate the clamped val
+	JSR NEGATE
+
+	;; fall through
+
+	@store_clamped_dy:
 	LDA $00
 	STA paddle_2_frac_dy
 	LDA $01
 	STA paddle_2_int_dy
 
-	LDA #$00
-	SEC
-	SBC paddle_2_last_dir
-	STA paddle_2_last_dir
-
 	;; fall through
 
-paddle_2_move:
-	CLC
+paddle_2_apply_dy:
 	LDA paddle_2_frac_y
+	CLC
 	ADC paddle_2_frac_dy
 	STA paddle_2_frac_y
 
@@ -430,6 +601,8 @@ paddle_2_move:
 	ADC paddle_2_int_dy
 	STA paddle_2_int_y
 
+
+	;; floor/ceiling check
 	LDA paddle_2_int_dy
 	BPL paddle_2_floor_check
 	;; else check for ceiling collis
@@ -522,7 +695,7 @@ perfect_ceiling_collis:
 	STA ball_int_dy
 
 	;; fall through
-	
+
 no_ceiling_collis:
 	RTS
 ;;; END OF BALL_CEILING_COLLIS ;;;
@@ -771,7 +944,7 @@ MOVE_BALL:
 
 	RTS
 ;;; END OF MOVE_BALL ;;;
-	
+
 
 	;; checks to see if the ball is in an appropriate position
 	;; to be considered colliding with the left paddle
@@ -1195,9 +1368,9 @@ insideloop:
 	STA PPUMASK
 
 	;; set initial vals for paddles
-	LDA #$03
-	STA paddle_1_int_dy
-	STA paddle_2_int_dy
+	LDA #$80
+	STA paddle_1_frac_dyy
+	STA paddle_2_frac_dyy
 
 	LDA #PADDLE_START_Y
 	STA paddle_1_int_y
@@ -1221,8 +1394,12 @@ insideloop:
 	STA nmt_len
 	STA frame_counter
 	STA gen_counter
+	STA paddle_1_frac_y
 	STA paddle_1_frac_dy
+	STA paddle_1_int_dyy
+	STA paddle_2_frac_y
 	STA paddle_2_frac_dy
+	STA paddle_2_int_dyy
 	STA ball_frac_x
 	STA ball_remndr_x
 	STA ball_int_dy
@@ -1241,10 +1418,6 @@ insideloop:
 	STA selected_option
 	LDA #$02
 	STA select_type
-
-	LDA #$01
-	STA paddle_1_last_dir
-	STA paddle_2_last_dir
 
 	LDA #$20
 	STA anim_speed
@@ -1343,17 +1516,7 @@ PLAY:
 
 	;; check if ball is hitting top of screen
 	JSR BALL_CEILING_COLLIS
-	;; JMP ball_vert_move_done
-	;; ball up movement done
-
-ball_down:
-	;; JSR MOVE_BALL_DOWN
-
-	;; check if ball is hitting bottom of screen
 	JSR BALL_FLOOR_COLLIS
-	;; ball down movement done
-
-ball_vert_move_done:
 
 	;; check if p2 scores by ball going off left side
 	LDA ball_int_x
@@ -1364,9 +1527,6 @@ ball_vert_move_done:
 	;; then check for left side paddle collis
 	JSR BALL_LEFT_PADDLE_COLLIS
 	JMP ball_right
-
-	;; JMP ball_horiz_move_done
-	;; ball left movement done
 
 	;; these scoring labels are the exit point of the PLAY function
 player_1_score:
@@ -1380,8 +1540,6 @@ player_2_score:
 	RTS
 
 ball_right:
-	;; JSR MOVE_BALL_RIGHT
-
 	;; check if p1 scores by ball going off right side
 	LDA ball_int_x
 	CLC
@@ -1391,10 +1549,6 @@ ball_right:
 
 	;; then check for right side paddle collis
 	JSR BALL_RIGHT_PADDLE_COLLIS
-
-	;; ball right movement done
-
-ball_horiz_move_done:
 
 	JSR COMMON_END
 	JMP PLAY
@@ -1412,7 +1566,7 @@ SCORE:
 	INC p1_score_MSB
 	LDA #$00
 	STA p1_score_LSB
-	
+
 @game_end_test:
 	;; now check if game has ended
 	LDA p1_score_MSB
@@ -1452,7 +1606,7 @@ p2_scored:
 
 score_end:
 	JSR DRAW_SCORE
-	
+
 	LDA #$00
 	STA nmt_buffer, Y
 	STY nmt_len
@@ -1460,8 +1614,13 @@ score_end:
 	LDA #$01
 	STA need_nmt
 
-	;; reverse x vel of ball since whoever got scored on will now
-	;; serve the ball
+	JSR SET_ANGLE_ZERO
+
+	;; if P1 scored then we want to reverse the ball's vel for
+	;; P2 to serve
+	LDA serving
+	BEQ @no_negate
+	
 	LDA ball_frac_dx
 	STA $00
 	LDA ball_int_dx
@@ -1472,7 +1631,8 @@ score_end:
 	LDA $01
 	STA ball_int_dx
 
-	JSR SET_ANGLE_ZERO
+@no_negate:
+
 
 	JSR COMMON_END
 	RTS
@@ -1515,7 +1675,7 @@ display_game_over:
 
 	LDA #CURSOR_FIRST_POS
 	STA cursor_y
-	
+
 GAME_END_CHECK_LOOP:
 	JSR GET_PLAYER_INPUT
 	LDX ctrl_jp_input_1
@@ -1529,7 +1689,7 @@ GAME_END_CHECK_LOOP:
 	AND #BTN_DOWN
 	BNE move_down_ge
 
-	
+
 
 GAME_END_CHECK_LOOP_END:
 	JSR COMMON_END
@@ -1551,7 +1711,7 @@ game_end_select:
 	BNE reset_game
 	;; else we go back to the title screen
 	;; fall through
-	
+
 	;; at some point this should send us back to the title
 	;; screen while keeping our settings but for now this
 	;; is good enough
@@ -1566,13 +1726,9 @@ reset_game:
 	LDA #PADDLE_START_Y
 	STA paddle_2_int_y
 
-	LDA #BALL_START_SPD_X
-	STA ball_int_dx
-	LDA #BALL_START_FRACX
-	STA ball_frac_dx
+	;; JSR SET_ANGLE_ZERO
 
-	JSR SET_ANGLE_ZERO
-	
+	LDA #$00
 	STA p1_score_LSB
 	STA p1_score_MSB
 	STA p2_score_LSB
@@ -1580,7 +1736,7 @@ reset_game:
 
 	STA game_over
 
-	
+
 	LDA #WINNER_LSB
 	LDY #WINNER_MSB
 	LDX #WINNER_SIZE
@@ -1606,13 +1762,13 @@ reset_game:
 	;; hide cursor before game
 	LDA #$FF
 	STA cursor_y
-	
+
 	JSR COMMON_END
-	
+
 	;; go back to SERVE
 	RTS
-	
-	
+
+
 	;; Handle all the sprite drawing for each frame
 	;; then burn cycles until next frame
 COMMON_END:
@@ -1878,4 +2034,4 @@ horiz_angle_table:
 	.word paddle_angle_four_up
 	.word paddle_angle_four_up
 	.word paddle_angle_four_up ; need an extra entry here for when the ball
-				  ; hits on top of the paddle
+				   ; hits on top of the paddle
