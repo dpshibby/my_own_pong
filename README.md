@@ -6,7 +6,21 @@ I've gone through a few NES tutorials and wanted to try to make a small
 game from scratch. The plan is to start with basic pong and maybe make some
 improvements from there.
 
-## Version 1.0
+## Version 1.1
+We've accumulated some nice changes since 1.0.
+
+* The ball and paddles look a little nicer
+
+* Players can set the number of points to win in the options menu
+
+* The ball can now move in several angles
+
+* The paddles have a bit of acceleration on them so they can move more precisely
+
+## Previous version notes
+
+### Version 1.0
+
 This is the first playable version.This is basically as simple as it
 gets while it is still recognizeable as Pong.
 
@@ -32,4 +46,5 @@ For now use:
 
 `ld65 src/my_own_pong.o -C nes.cfg -o my_pong.nes`
 
-More instructions will be written later, maybe a Makefile
+There is now a makefile! It is pretty basic and also generates debug
+information. It will be a little more fine tuned later.
