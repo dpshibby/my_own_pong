@@ -96,7 +96,7 @@ DEBUG_RESET:
 	;; reset ball
 	LDA #BALL_START_X
 	LDA #$E0
-	STA ball_x
+	STA ball_int_x
 	LDA #BALL_START_Y
 	LDA #$4D
 ;;;;;; Current angles, tested ;;;;;;
@@ -110,19 +110,15 @@ DEBUG_RESET:
 ;;; 70, 6F = mostly up
 ;;; 6E, 6D = sharp up
 ;;;;;; Current angles, tested ;;;;;;
-	STA ball_y
-	LDA #$01
-	STA ball_up
-	LDA #$00
-	STA ball_left
+	STA ball_int_y
 	JSR SET_ANGLE_FOUR
 
 	;; reset paddles
 	LDA #PADDLE_START_Y
-	STA paddle_1_top
+	STA paddle_1_int_y
 
 	LDA #PADDLE_START_Y
-	STA paddle_2_top
+	STA paddle_2_int_y
 
 	RTS
 
