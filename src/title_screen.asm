@@ -626,10 +626,10 @@ game_start:
 	LDA #$20
 	STA nmt_buffer, Y
 	INY
-	TAX
+	LDX #$20
 	STA nmt_buffer, Y
 	INY
-	LDA #$00
+	LDA #$60
 	STA nmt_buffer, Y
 	INY
 
@@ -644,11 +644,11 @@ top_line_loop:
 	LDA #$20
 	STA nmt_buffer, Y
 	INY
-	TAX
+	LDX #$20
 	LDA #$23
 	STA nmt_buffer, Y
 	INY
-	LDA #$A0
+	LDA #$80
 	STA nmt_buffer, Y
 	INY
 
