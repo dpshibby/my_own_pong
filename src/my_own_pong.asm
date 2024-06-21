@@ -1,3 +1,10 @@
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; TODO:
+;;;
+;;; * So far everything is looking good
+;;; * May or may not break down when things speed up
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 	.include "header.asm"
 	.include "constants.asm"
 
@@ -79,14 +86,14 @@ nmt_buffer:	.res 256
 palette_buffer:	.res 32
 
 	;; Game specific constants
-	TOP_WALL            = $07
+	TOP_WALL            = $1F
 	RIGHT_WALL          = $FB
-	BOTTOM_WALL         = $E7
+	BOTTOM_WALL         = $DF
 	LEFT_WALL           = $04
 
-	PADDLE_1_X          = $0C
-	PADDLE_2_X          = $F0
-	PADDLE_START_Y      = $70
+	PADDLE_1_X          = $1C
+	PADDLE_2_X          = $E0
+	PADDLE_START_Y      = $78
 	PADDLE_WIDTH        = $04
 	PADDLE_LEN          = $10
 	PADDLE_INT_DY_MAX   = $01
@@ -252,6 +259,261 @@ NEGATE:
 	RTS
 ;;; END OF NEGATE ;;;
 
+	;; eject the ball from an object it collides with
+	;; in the opposite direction of its movement
+	;; NB: There is certainly a better way to do the paddle
+	;;     checks in this function. Probably by storing the
+	;;     checking paddle's y val in $02 rather than a flag
+	;; TODO: Rewrite the paddle_y vs ball_y comparison section
+;; BALL_EJECT:
+;; 	;; load in the eject amounts
+;; 	LDA #COLLIS_EJECT_FRAC
+;; 	STA $00
+;; 	LDA #COLLIS_EJECT_INT
+;; 	STA $01
+;; 	;; left or right eject?
+;; 	LDA ball_int_dx
+;; 	BMI right_eject 	; (add)
+;; 	;; else eject to left (sub)
+;; 	JSR NEGATE
+
+;; right_eject:
+;; 	CLC
+;; 	LDA ball_frac_x
+;; 	ADC $00
+;; 	STA ball_frac_x
+;; 	LDA ball_int_x
+;; 	ADC $01
+;; 	STA ball_int_x
+
+;; 	;; if ball is not moving vertically don't eject it vertically
+;; 	LDA ball_int_dy
+;; 	ORA ball_frac_dy
+;; 	BEQ ball_eject_end
+
+;; 	;; reload the eject amounts in case they changed base on the previous calc
+;; 	LDA #COLLIS_EJECT_FRAC
+;; 	STA $00
+;; 	LDA #COLLIS_EJECT_INT
+;; 	STA $01
+
+;; 	;; up or down eject?
+;; 	LDA ball_int_dy
+;; 	BMI down_eject_check	; (add)
+;; 	;; else eject upwards (sub)
+
+;; 	LDA $02			; which paddle y, if any
+;; 	BEQ no_pad
+;; 	;; if this is an eject from a paddle, we must do some extra checks
+
+;; 	;; in this scenario the ball is moving down on the screen and hits
+;; 	;; a paddle. We should see if the ball is near the bottom of the paddle
+;; 	;; if it is, we do not want to eject upwards anymore and should skip the
+;; 	;; NEGATE call
+;; 	LDA $02
+;; 	CLC
+;; 	ADC #$08 		; half the paddle length
+;; 	CMP ball_int_y
+;; 	BCC down_eject		; paddle middle y < ball y
+;; 	JMP no_pad
+
+
+;; no_pad:
+;; 	JSR NEGATE
+;; 	JMP down_eject
+
+;; down_eject_check:
+;; 	LDA $02			; which paddle y, if any
+;; 	BEQ down_eject
+
+;; 	LDA $02
+;; 	CLC
+;; 	ADC #$08 		; half the paddle length
+;; 	CMP ball_int_y
+;; 	BCS down_eject		; paddle middle y >= ball y
+;; 	JMP no_pad
+
+;; down_eject:
+;; 	CLC
+;; 	LDA ball_frac_y
+;; 	ADC $00
+;; 	STA ball_frac_y
+;; 	LDA ball_int_y
+;; 	ADC $01
+;; 	STA ball_int_y
+
+;; ball_eject_end:
+;; 	RTS
+;;; END OF BALL_EJECT
+
+BALL_EJECT:
+	;; load in the eject amounts
+	LDA #COLLIS_EJECT_FRAC
+	STA $00
+	LDA #COLLIS_EJECT_INT
+	STA $01
+	;; left or right eject?
+	LDA ball_int_dx
+	BMI right_eject 	; (add)
+	;; else eject to left (sub)
+	JSR NEGATE
+
+right_eject:
+	CLC
+	LDA ball_frac_x
+	ADC $00
+	STA ball_frac_x
+	LDA ball_int_x
+	ADC $01
+	STA ball_int_x
+
+	;; if ball is not moving vertically don't eject it vertically
+	LDA ball_int_dy
+	ORA ball_frac_dy
+	BEQ ball_eject_end
+
+	;; reload the eject amounts in case they changed base on the previous calc
+	LDA #COLLIS_EJECT_FRAC
+	STA $00
+	LDA #COLLIS_EJECT_INT
+	STA $01
+
+	;; This may or may not be useful when ball ends up at higher speeds
+	;; for now everything seems to work okay without it
+	;; LDA $03
+	;; EOR ball_int_dy
+	;; BMI ball_vert_eject
+	;; ;; if ball and paddle are going same direction we will move
+	;; ;; the paddle instead of the ball
+	;; JSR PADDLE_REVERT
+	;; JMP ball_eject_end
+
+
+ball_vert_eject:
+	;; up or down eject?
+	LDA ball_int_dy
+	BMI down_eject		; (add)
+	;; else eject upwards (sub)
+	JSR NEGATE
+
+down_eject:
+	CLC
+	LDA ball_frac_y
+	ADC $00
+	STA ball_frac_y
+	LDA ball_int_y
+	ADC $01
+	STA ball_int_y
+
+
+ball_eject_end:
+	RTS
+;;; END OF BALL_EJECT ;;;
+
+	;; This function is used in tandem with BALL_EJECT
+	;; This one moves the paddle slightly in the opposite direction
+	;; during a collision to help find the exact moment of impact
+PADDLE_REVERT:
+	;; if paddle is not even moving then we leave
+	LDA $03
+	ORA $02
+	BEQ paddle_revert_end
+
+	;; load the eject amounts
+	LDA #$40
+	STA $00
+	LDA #$00
+	STA $01
+
+	;; up or down eject?
+	LDA $03
+	BMI paddle_down_revert	; (add)
+	;; else eject upwards (sub)
+	JSR NEGATE
+
+paddle_down_revert:
+	CLC
+	LDA $04
+	ADC $00
+	STA $04
+	LDA $05
+	ADC $01
+	STA $05
+
+paddle_revert_end:
+	RTS
+;;; END OF PADDLE_REVERT ;;;
+	
+
+	;; respond when the ball bonks on the flat top or bottom
+	;; portion of the paddle
+PADDLE_TOP_OR_BOT_COLLIS:
+	;; if paddle and ball are going in the same direction
+	;; we add a little speed to the ball and that's it
+	LDA ball_int_dy
+	EOR $03
+	BPL ball_paddle_same_dir
+
+	;; in this case, paddle and ball are going opposite directions,
+	;; or paddle is not moving. In both cases we want to flip the ball's
+	;; dy
+
+	LDA ball_frac_dy
+	STA $00
+	LDA ball_int_dy
+	STA $01
+	JSR NEGATE
+	LDA $00
+	STA ball_frac_dy
+	LDA $01
+	STA ball_int_dy
+
+	;; if paddle is not moving then we're done here
+	LDA $03
+	ORA $02
+	BEQ paddle_top_or_bot_collis_end
+
+
+	;; we add little speed to the paddle speed we saved, then add that
+	;; to the ball's speed
+ball_paddle_same_dir:
+	LDA $03
+	BPL add_to_paddle_dy
+	;; else sub from paddle_dy
+	SEC
+	LDA $02
+	SBC #$40
+	STA $02
+	LDA $03
+	SBC #$00
+	STA $03
+	JMP add_paddle_dy_to_ball
+
+	;; increase the stored paddle_dy in the positive direction
+add_to_paddle_dy:
+	CLC
+	LDA $02
+	ADC #$40
+	STA $02
+	LDA $03
+	ADC #$00
+	STA $03
+
+	;; fall through
+
+add_paddle_dy_to_ball:
+	CLC
+	LDA ball_frac_dy
+	ADC $02
+	STA ball_frac_dy
+	LDA ball_int_dy
+	ADC $03
+	STA ball_int_dy
+
+paddle_top_or_bot_collis_end:
+	RTS
+
+	
 	;; this is for 16 bit values
 	;; If N1 is within range N2 return 0
 	;; $00 = low byte to check
@@ -676,44 +938,49 @@ BALL_CEILING_COLLIS:
 	CMP ball_int_y
 	BCC no_ceiling_collis
 
-	LDA ball_remndr_y
-	BNE consume_ceiling_remainder
+	LDA #$01
+	STA $08
 
-	;; create_ceiling_remainder
+ball_ceiling_test_eject:
 	LDA #TOP_WALL
-	SEC
-	SBC ball_int_y
-	STA ball_remndr_y
+	CMP ball_int_y
 	BEQ perfect_ceiling_collis
-	LDA #TOP_WALL
+
+	
+	;; if ball is still inside wall, eject it on x and y axis then loop back
+	;; for y axis we're always going to add
+	CLC
+	LDA ball_frac_y
+	ADC #COLLIS_EJECT_FRAC
+	STA ball_frac_y
+	LDA ball_int_y
+	ADC #COLLIS_EJECT_INT
 	STA ball_int_y
 
-	JMP no_ceiling_collis
-
-consume_ceiling_remainder:
-	;; on collis, reverse y velocity
-	LDA ball_frac_dy
-	STA $00
-	LDA ball_int_dy
-	STA $01
-	JSR NEGATE
-	LDA $00
-	STA ball_frac_dy
-	LDA $01
-	STA ball_int_dy
-
-	;; set the ball to top wall then add offset based on
-	;; remainder and ball velocity
-	LDA #TOP_WALL
+	
+	;; for x axis check if ball is moving pos or negative and eject
+	;; in the opposite direction
+	LDA ball_int_x
+	BPL ball_ceiling_eject_left ; (sub)
+	;; else eject right (add)
 	CLC
-	ADC ball_remndr_y
-	CLC
-	ADC ball_int_dy
-	STA ball_int_y
-	LDA #$00
-	STA ball_remndr_y
+	LDA ball_frac_x
+	ADC #COLLIS_EJECT_FRAC
+	STA ball_frac_x
+	LDA ball_int_x
+	ADC #COLLIS_EJECT_INT
+	STA ball_int_x
+	JMP ball_ceiling_test_eject
 
-	JMP no_ceiling_collis
+ball_ceiling_eject_left:
+	SEC
+	LDA ball_frac_x
+	SBC #COLLIS_EJECT_FRAC
+	STA ball_frac_x
+	LDA ball_int_x
+	SBC #COLLIS_EJECT_INT
+	STA ball_int_x
+	JMP ball_ceiling_test_eject
 
 perfect_ceiling_collis:
 	;; on collis, reverse y velocity
@@ -741,49 +1008,50 @@ BALL_FLOOR_COLLIS:
 	BCC no_floor_collis
 
 
-	TAX			; save our calculated bottom of ball in X
-	LDA ball_remndr_y
-	BNE consume_floor_remainder
-
-	;; create_floor_remainder
-	TXA
-	SEC
-	SBC #BOTTOM_WALL
-	STA ball_remndr_y
-	BEQ perfect_floor_collis
-	LDA #BOTTOM_WALL
-	SEC
-	SBC #BALL_DIAMETER
-	STA ball_int_y
-
-	JMP no_floor_collis
-
-consume_floor_remainder:
-	;; on collis, reverse y velocity
-	LDA ball_frac_dy
-	STA $00
-	LDA ball_int_dy
-	STA $01
-	JSR NEGATE
-	LDA $00
-	STA ball_frac_dy
-	LDA $01
-	STA ball_int_dy
-
-	;; set the ball to bot wall then add offset based on
-	;; remainder and ball velocity
-	LDA #BOTTOM_WALL
-	SEC
-	SBC ball_remndr_y
-	SEC
-	SBC #BALL_DIAMETER
+	;; if we make a collision, stop our physics ticks for this frame
+	LDA #$01
+	STA $08
+	
+ball_floor_test_eject:
+	LDA ball_int_y
 	CLC
-	ADC ball_int_dy
+	ADC #BALL_DIAMETER	; get to bottom of ball sprite
+	CMP #BOTTOM_WALL
+	BEQ perfect_floor_collis
+	;; if ball is still inside wall, eject it on x and y axis then loop back
+	;; for y axis we're always going to subtract
+	SEC
+	LDA ball_frac_y
+	SBC #COLLIS_EJECT_FRAC
+	STA ball_frac_y
+	LDA ball_int_y
+	SBC #COLLIS_EJECT_INT
 	STA ball_int_y
-	LDA #$00
-	STA ball_remndr_y
 
-	JMP no_floor_collis
+	;; for x axis check if ball is moving pos or negative and eject
+	;; in the opposite direction
+	LDA ball_int_x
+	BPL ball_floor_eject_left ; (sub)
+	;; else eject right (add)
+	CLC
+	LDA ball_frac_x
+	ADC #COLLIS_EJECT_FRAC
+	STA ball_frac_x
+	LDA ball_int_x
+	ADC #COLLIS_EJECT_INT
+	STA ball_int_x
+	JMP ball_floor_test_eject
+
+ball_floor_eject_left:
+	SEC
+	LDA ball_frac_x
+	SBC #COLLIS_EJECT_FRAC
+	STA ball_frac_x
+	LDA ball_int_x
+	SBC #COLLIS_EJECT_INT
+	STA ball_int_x
+	JMP ball_floor_test_eject
+	
 
 perfect_floor_collis:
 	;; on collis, reverse y velocity
@@ -976,14 +1244,22 @@ LEFT_PADDLE_AREA_CHECK:
 	CMP ball_int_x
 	BCC left_paddle_miss
 
-	;; second: is bottom of ball under top of paddle
+	;; second: is the right side of the ball beyond the left
+	;; side of the paddle
+	LDA ball_int_x
+	CLC
+	ADC #$02
+	CMP #PADDLE_1_X
+	BCC left_paddle_miss
+
+	;; third: is bottom of ball under top of paddle
 	LDA ball_int_y
 	CLC
 	ADC #BALL_DIAMETER
 	CMP paddle_1_int_y
 	BCC left_paddle_miss
 
-	;; third: is top of ball over bottom of paddle?
+	;; fourth: is top of ball over bottom of paddle?
 	LDA paddle_1_int_y
 	CLC
 	ADC #PADDLE_LEN
@@ -1001,26 +1277,32 @@ left_paddle_area_check_done:
 ;;; END OF LEFT_PADDLE_AREA_CHECK ;;;
 
 BALL_LEFT_PADDLE_COLLIS:
-	;; first: is right side of ball reaching the paddle yet?
+	;; check if ball is within paddle
 	LDA #PADDLE_1_X
 	CLC
 	ADC #PADDLE_WIDTH
-	TAX			; save in X
+	TAX			; save right side of paddle in X
 	JSR LEFT_PADDLE_AREA_CHECK
-	BEQ no_left_paddle_collis_pad
+	BEQ no_left_paddle_collis
+
+	;; add these values to memory to use within function
+	LDA paddle_2_int_dy
+	STA $03
+	LDA paddle_2_frac_dy
+	STA $02
+
+	LDA paddle_2_int_y
+	STA $05
+	LDA paddle_2_frac_y
+	STA $04
 
 	;; collision definitely happened
+	;; we're going to cut short the physics calcs after this
+	;; so we have at least 1 frame of the ball touching the
+	;; paddle
+	LDA #$01
+	STA $08
 	;; are we going to count it as vertical or horizontal?
-
-	;; if ball has no y speed then ball_up/down will throw off ball
-	;; adjustment, so we check speed here
-	LDA ball_int_dy
-	ORA ball_frac_dy
-	BNE left_paddle_test_eject
-	;; else place ball on right side of paddle and assume horiz collis
-	TXA
-	STA ball_int_x
-	JMP left_paddle_horiz_collis
 left_paddle_test_eject:
 	TXA			; retrieve right side of paddle
 	CMP ball_int_x
@@ -1038,57 +1320,26 @@ left_paddle_test_eject:
 
 	;; if none of above conditions are met, we readjust the ball
 	;; then loop back up to try again
-left_paddle_ball_eject:
-	;; INC ball_int_x
-	CLC
-	LDA ball_frac_x
-	ADC #COLLIS_EJECT_FRAC
-	STA ball_frac_x
-	LDA ball_int_x
-	ADC #COLLIS_EJECT_INT
-	STA ball_int_x
+	;; flag stored in 2 is which paddle, if any
+	JSR BALL_EJECT
 
-	;; if ball is moving down (pos value), want to eject up (DEC)
-	LDA ball_int_dy
-	BPL left_paddle_eject_up
-	;; else ball was moving up and we should eject downward
-	;; INC ball_int_y
-	CLC
-	LDA ball_frac_y
-	ADC #COLLIS_EJECT_FRAC
-	STA ball_frac_y
-	LDA ball_int_y
-	ADC #COLLIS_EJECT_INT
-	STA ball_int_y
-	JMP left_paddle_test_eject
-left_paddle_eject_up:
-	;; DEC ball_int_y
-	SEC
-	LDA ball_frac_y
-	SBC #COLLIS_EJECT_FRAC
-	STA ball_frac_y
-	LDA ball_int_y
-	SBC #COLLIS_EJECT_INT
-	STA ball_int_y
-
+	;; if BALL_EJECT changes paddle then we should
+	;; reflect the change here
+	LDA $05
+	STA paddle_2_int_y
+	LDA $04
+	STA paddle_2_frac_y
+	
 	;; else no hit, do another loop
 	JMP left_paddle_test_eject
 
 	;; if we get a top/bot collis we just reflect Y velocity and carry on
 left_paddle_top_or_bot_collis:
-	LDA ball_frac_dy
-	STA $00
-	LDA ball_int_dy
-	STA $01
-	JSR NEGATE
-	LDA $00
-	STA ball_frac_dy
-	LDA $01
-	STA ball_int_dy
-
-	JMP no_left_paddle_collis
-
-no_left_paddle_collis_pad:
+	LDA paddle_1_frac_dy
+	STA $02
+	LDA paddle_1_int_dy
+	STA $03
+	JSR PADDLE_TOP_OR_BOT_COLLIS
 	JMP no_left_paddle_collis
 
 left_paddle_horiz_collis:
@@ -1129,21 +1380,26 @@ RIGHT_PADDLE_AREA_CHECK:
 	CMP #PADDLE_2_X
 	BCC right_paddle_miss
 
-	;; second: is bottom of ball under top of paddle?
+	;; second: is left side of ball beyond the paddle
+	LDA #PADDLE_2_X
+	CLC
+	ADC #$02
+	CMP ball_int_x
+	BCC right_paddle_miss
+
+	;; third: is bottom of ball under top of paddle?
 	LDA ball_int_y
 	CLC
 	ADC #BALL_DIAMETER	; get bottom of ball sprite
 	CMP paddle_2_int_y
 	BCC right_paddle_miss
-	BEQ right_paddle_miss	;test
 
-	;; third: is top of ball over bottom of paddle?
+	;; fourth: is top of ball over bottom of paddle?
 	LDA paddle_2_int_y
 	CLC
 	ADC #PADDLE_LEN
 	CMP ball_int_y
 	BCC right_paddle_miss
-	BEQ right_paddle_miss	;test
 
 	;; seems like we did in fact collide
 	LDA #$01
@@ -1156,27 +1412,31 @@ right_paddle_area_check_done:
 ;;; END OF RIGHT_PADDLE_AREA_CHECK ;;;
 
 BALL_RIGHT_PADDLE_COLLIS:
-	;; first: is right side of ball reaching the paddle yet?
+	;; check if ball is within paddle
 	LDA ball_int_x
 	CLC
 	ADC #BALL_DIAMETER	; get right side
 	JSR RIGHT_PADDLE_AREA_CHECK
-	BEQ no_right_paddle_collis_pad
+	BEQ no_right_paddle_collis
+
+	;; add these values to memory to use within function
+	LDA paddle_2_int_dy
+	STA $03
+	LDA paddle_2_frac_dy
+	STA $02
+
+	LDA paddle_2_int_y
+	STA $05
+	LDA paddle_2_frac_y
+	STA $04
 
 	;; collision definitely happened
+	;; we're going to cut short the physics calcs after this
+	;; so we have at least 1 frame of the ball touching the
+	;; paddle
+	LDA #$01
+	STA $08
 	;; are we going to count it as vertical or horizontal?
-
-	;; if ball has no y speed then ball_up/down will throw off ball
-	;; adjustment, so we check speed here
-	LDA ball_int_dy
-	ORA ball_frac_dy
-	BNE right_paddle_test_eject
-	;; else place ball on left side of paddle and assume horiz collis
-	LDA #PADDLE_2_X
-	SEC
-	SBC #BALL_DIAMETER
-	STA ball_int_x
-	JMP right_paddle_horiz_collis
 right_paddle_test_eject:
 	LDA ball_int_x
 	CLC
@@ -1196,57 +1456,22 @@ right_paddle_test_eject:
 
 	;; if none of above conditions are met, we readjust the ball
 	;; then loop back up to try again
-right_paddle_ball_eject:
-	;; DEC ball_int_x
-	SEC
-	LDA ball_frac_x
-	SBC #COLLIS_EJECT_FRAC
-	STA ball_frac_x
-	LDA ball_int_x
-	SBC #COLLIS_EJECT_INT
-	STA ball_int_x
+	JSR BALL_EJECT
 
-	;; if ball is moving down (pos value), want to eject up (DEC)
-	LDA ball_int_dy
-	BPL right_paddle_eject_up
-	;; else ball was moving up (neg value) and we should eject downward (INC)
-	;; INC ball_int_y
-	CLC
-	LDA ball_frac_y
-	ADC #$40
-	STA ball_frac_y
-	LDA ball_int_y
-	ADC #$00
-	STA ball_int_y
-	JMP right_paddle_test_eject
-right_paddle_eject_up:
-	;; DEC ball_int_y
-	SEC
-	LDA ball_frac_y
-	SBC #COLLIS_EJECT_FRAC
-	STA ball_frac_y
-	LDA ball_int_y
-	SBC #COLLIS_EJECT_INT
-	STA ball_int_y
+	;; if BALL_EJECT changes paddle then we should
+	;; reflect the change here
+	LDA $05
+	STA paddle_2_int_y
+	LDA $04
+	STA paddle_2_frac_y
+	
 
 	;; else no hit, do another loop
 	JMP right_paddle_test_eject
 
 	;; if we get a top/bot collis we just reflect Y velocity and carry on
 right_paddle_top_or_bot_collis:
-	LDA ball_frac_dy
-	STA $00
-	LDA ball_int_dy
-	STA $01
-	JSR NEGATE
-	LDA $00
-	STA ball_frac_dy
-	LDA $01
-	STA ball_int_dy
-
-	JMP no_right_paddle_collis
-
-no_right_paddle_collis_pad:
+	JSR PADDLE_TOP_OR_BOT_COLLIS
 	JMP no_right_paddle_collis
 
 right_paddle_horiz_collis:
@@ -1298,7 +1523,7 @@ DRAW_SCORE:
 	LDA #$20
 	STA nmt_buffer, Y
 	INY
-	LDA #$07
+	LDA #$47
 	STA nmt_buffer, Y
 	INY
 	LDA #$1F		; P
@@ -1307,7 +1532,7 @@ DRAW_SCORE:
 	LDA #$41		; 1
 	STA nmt_buffer, Y
 	INY
-	LDA #$01		; space
+	LDA #$00		; space
 	STA nmt_buffer, Y
 	INY
 
@@ -1330,7 +1555,7 @@ DRAW_SCORE:
 	LDA #$20
 	STA nmt_buffer, Y
 	INY
-	LDA #$14
+	LDA #$54
 	STA nmt_buffer, Y
 	INY
 	LDA #$1F		; P
@@ -1339,7 +1564,7 @@ DRAW_SCORE:
 	LDA #$42		; 2
 	STA nmt_buffer, Y
 	INY
-	LDA #$01		; space
+	LDA #$00		; space
 	STA nmt_buffer, Y
 	INY
 
@@ -1596,9 +1821,19 @@ PLAY:
 	;; move the ball
 	JSR MOVE_BALL
 	;; check if ball is hitting top of screen or bottom
+	LDA ball_int_dy
+	BPL @ball_floor_check
 	JSR BALL_CEILING_COLLIS
+	JMP @ball_floor_ceiling_done
+
+@ball_floor_check:
 	JSR BALL_FLOOR_COLLIS
 
+@ball_floor_ceiling_done:
+
+	LDA ball_int_dx
+	BPL @right_side_checks
+	;; else check left paddle and left score zone
 	;; check if p2 scores by ball going off left side
 	LDA ball_int_x
 	CMP #LEFT_WALL
@@ -1607,7 +1842,9 @@ PLAY:
 
 	;; then check for left side paddle collis
 	JSR BALL_LEFT_PADDLE_COLLIS
+	JMP @phys_loop_end
 
+	@right_side_checks:
 	;; check if p1 scores by ball going off right side
 	LDA ball_int_x
 	CLC
@@ -1618,6 +1855,9 @@ PLAY:
 	;; then check for right side paddle collis
 	JSR BALL_RIGHT_PADDLE_COLLIS
 
+	;; fall through
+
+@phys_loop_end:
 	DEC $08
 	BNE @phys_loop
 	;; end of phys_loop
@@ -2071,8 +2311,8 @@ background:
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
 attributes:  ; 8 x 8 = 64 bytes
-	.byte %00000101, %00000101, %00000101, %00000101
-	.byte %00000101, %00000101, %00000101, %00000101
+	.byte %01010000, %01010000, %01010000, %01010000
+	.byte %01010000, %01010000, %01010000, %01010000
 
 	.byte %00000000, %00000000, %00000000, %00000000
 	.byte %00000000, %00000000, %00000000, %00000000
