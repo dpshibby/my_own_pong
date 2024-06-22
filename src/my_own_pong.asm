@@ -4,6 +4,9 @@
 ;;; * The object pools method seems to be working very well at first glance!
 ;;;
 ;;; * Do some extra testing, especially on tricky angles
+;;;
+;;; * The freakin both sides check thing blew up, looks like we'll have to check
+;;;   which paddle we're hitting to make the eject test work properly
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 	.include "header.asm"
@@ -289,13 +292,13 @@ right_eject:
 
 	;; This may or may not be useful when ball ends up at higher speeds
 	;; for now everything seems to work okay without it
-	;; LDA $03
-	;; EOR ball_int_dy
-	;; BMI ball_vert_eject
-	;; ;; if ball and paddle are going same direction we will move
-	;; ;; the paddle instead of the ball
-	;; JSR PADDLE_REVERT
-	;; JMP ball_eject_end
+	LDA paddle_int_dy, X
+	EOR ball_int_dy
+	BMI ball_vert_eject
+	;; if ball and paddle are going same direction we will move
+	;; the paddle instead of the ball
+	JSR PADDLE_REVERT
+	JMP ball_eject_end
 
 
 ball_vert_eject:
@@ -324,8 +327,8 @@ ball_eject_end:
 	;; during a collision to help find the exact moment of impact
 PADDLE_REVERT:
 	;; if paddle is not even moving then we leave
-	LDA $03
-	ORA $02
+	LDA paddle_int_dy, X
+	ORA paddle_frac_dy, X
 	BEQ paddle_revert_end
 
 	;; load the eject amounts
@@ -335,19 +338,19 @@ PADDLE_REVERT:
 	STA $01
 
 	;; up or down eject?
-	LDA $03
+	LDA paddle_int_dy, X
 	BMI paddle_down_revert	; (add)
 	;; else eject upwards (sub)
 	JSR NEGATE
 
 paddle_down_revert:
 	CLC
-	LDA $04
+	LDA paddle_frac_y, X
 	ADC $00
-	STA $04
-	LDA $05
+	STA paddle_frac_y, X
+	LDA paddle_int_y, X
 	ADC $01
-	STA $05
+	STA paddle_int_y, X
 
 paddle_revert_end:
 	RTS
@@ -384,7 +387,7 @@ PADDLE_TOP_OR_BOT_COLLIS:
 	BEQ paddle_top_or_bot_collis_end
 
 
-	;; we add little speed to the paddle speed we saved, then add that
+	;; we add little speed to the paddle speed, then add that
 	;; to the ball's speed
 ball_paddle_same_dir:
 	LDA paddle_int_dy, X
@@ -1026,11 +1029,6 @@ BALL_PADDLE_COLLISION:
 	LDA paddle_frac_dy, X
 	STA $02
 
-	LDA paddle_int_y, X
-	STA $05
-	LDA paddle_frac_y, X
-	STA $04
-
 	;; collision definitely happened
 	;; we're going to cut short the physics calcs after this
 	;; so we have at least 1 frame of the ball touching the
@@ -1040,23 +1038,26 @@ BALL_PADDLE_COLLISION:
 	;; are we going to count it as vertical or horizontal?
 paddle_test_eject:
 	;; horiz checks
-	;; we check if the ball is hitting the side of both paddles here
-	;; because it ends up being simpler than checking which paddle
-	;; we're at and they're mutually exclusive so we shouldn't
-	;; get any false positives
+	TXA
+	BEQ left_paddle_check
+	;; else right paddle check
 	LDA ball_int_x
 	CLC
 	ADC #BALL_DIAMETER
 	CMP paddle_int_x, X
 	BEQ paddle_horiz_collis
+	JMP vertical_checks
 	
+left_paddle_check:
 	LDA paddle_int_x, X
 	CLC
 	ADC #PADDLE_WIDTH
 	CMP ball_int_x
 	BEQ paddle_horiz_collis
+
+	;; fall through
 	
-	;; vertical checks
+vertical_checks:
 	LDA paddle_int_y, X
 	CLC
 	ADC #PADDLE_LEN
@@ -1071,13 +1072,6 @@ paddle_test_eject:
 	;; if none of above conditions are met, we readjust the ball
 	;; then loop back up to try again
 	JSR BALL_EJECT
-
-	;; if BALL_EJECT changes paddle then we should
-	;; reflect the change here
-	;; LDA $05
-	;; STA paddle_2_int_y
-	;; LDA $04
-	;; STA paddle_2_frac_y
 	
 	;; else no hit, do another loop
 	JMP paddle_test_eject
@@ -1354,7 +1348,7 @@ insideloop:
 	STA win_score_LSB
 
 	;; uncomment for quick start/debug mode
-	;; .include "debug.asm"
+	.include "debug.asm"
 
 	JMP TITLE_SCREEN
 	.include "title_screen.asm"
