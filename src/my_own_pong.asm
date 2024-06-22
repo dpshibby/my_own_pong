@@ -1,8 +1,9 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; TODO:
 ;;;
-;;; * So far everything is looking good
-;;; * May or may not break down when things speed up
+;;; * The object pools method seems to be working very well at first glance!
+;;;
+;;; * Do some extra testing, especially on tricky angles
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 	.include "header.asm"
@@ -16,6 +17,33 @@
 	.addr NMI
 	.addr RESET
 	.addr 0		; IRQ unused
+
+	;; Game specific constants
+	NUM_PLAYERS = 2
+
+	TOP_WALL            = $1F
+	RIGHT_WALL          = $FB
+	BOTTOM_WALL         = $DF
+	LEFT_WALL           = $04
+
+	PADDLE_1_X          = $1C
+	PADDLE_2_X          = $E0
+	PADDLE_START_Y      = $78
+	PADDLE_WIDTH        = $04
+	PADDLE_LEN          = $10
+	PADDLE_INT_DY_MAX   = $01
+	PADDLE_FRAC_DY_MAX  = $00
+	PADDLE_INT_DYY_DEF  = $00
+	PADDLE_FRAC_DYY_DEF = $08
+	PADDLE_INT_DEC_DEF  = $00 ; deceleration
+	PADDLE_FRAC_DEC_DEF = $10
+
+	BALL_START_X        = $80
+	BALL_START_Y        = $FF
+	BALL_DIAMETER       = $04
+
+	COLLIS_EJECT_INT    = $00
+	COLLIS_EJECT_FRAC   = $40
 
 	.segment "ZEROPAGE"
 pointerLo:	   .res 1	; pointer vars for 2byte addr
@@ -33,26 +61,18 @@ game_over:	   .res 1	; 1 = p1 won, 2 = p2 won
 win_score_MSB:	   .res 1
 win_score_LSB:	   .res 1
 
-ctrl_input_1:	   .res 1
-ctrl_prev_input_1: .res 1
-ctrl_jp_input_1:   .res 1	; jp = just pressed on this frame
-ctrl_input_2:      .res 1
-ctrl_prev_input_2: .res 1
-ctrl_jp_input_2:   .res 1
 
-paddle_1_int_y:	   .res 1
-paddle_1_frac_y:   .res 1
-paddle_1_int_dy:   .res 1
-paddle_1_frac_dy:  .res 1
-paddle_1_int_dyy:  .res 1
-paddle_1_frac_dyy: .res 1
+ctrl_input:	   .res NUM_PLAYERS
+ctrl_prev_input:   .res NUM_PLAYERS
+ctrl_jp_input:	   .res NUM_PLAYERS ; jp = just pressed on this frame
 
-paddle_2_int_y:	   .res 1
-paddle_2_frac_y:   .res 1
-paddle_2_int_dy:   .res 1
-paddle_2_frac_dy:  .res 1
-paddle_2_int_dyy:  .res 1
-paddle_2_frac_dyy: .res 1
+paddle_int_x:	   .res NUM_PLAYERS
+paddle_int_y:	   .res NUM_PLAYERS
+paddle_frac_y:	   .res NUM_PLAYERS
+paddle_int_dy:	   .res NUM_PLAYERS
+paddle_frac_dy:	   .res NUM_PLAYERS
+paddle_int_dyy:	   .res NUM_PLAYERS
+paddle_frac_dyy:   .res NUM_PLAYERS
 
 ball_int_x:        .res 1
 ball_frac_x:	   .res 1
@@ -85,30 +105,6 @@ need_ppureg:	   .res 1
 nmt_buffer:	.res 256
 palette_buffer:	.res 32
 
-	;; Game specific constants
-	TOP_WALL            = $1F
-	RIGHT_WALL          = $FB
-	BOTTOM_WALL         = $DF
-	LEFT_WALL           = $04
-
-	PADDLE_1_X          = $1C
-	PADDLE_2_X          = $E0
-	PADDLE_START_Y      = $78
-	PADDLE_WIDTH        = $04
-	PADDLE_LEN          = $10
-	PADDLE_INT_DY_MAX   = $01
-	PADDLE_FRAC_DY_MAX  = $00
-	PADDLE_INT_DYY_DEF  = $00
-	PADDLE_FRAC_DYY_DEF = $08
-	PADDLE_INT_DEC_DEF  = $00 ; deceleration
-	PADDLE_FRAC_DEC_DEF = $10
-
-	BALL_START_X        = $80
-	BALL_START_Y        = $FF
-	BALL_DIAMETER       = $04
-
-	COLLIS_EJECT_INT    = $00
-	COLLIS_EJECT_FRAC   = $40
 
 	.segment "CODE"
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -259,93 +255,6 @@ NEGATE:
 	RTS
 ;;; END OF NEGATE ;;;
 
-	;; eject the ball from an object it collides with
-	;; in the opposite direction of its movement
-	;; NB: There is certainly a better way to do the paddle
-	;;     checks in this function. Probably by storing the
-	;;     checking paddle's y val in $02 rather than a flag
-	;; TODO: Rewrite the paddle_y vs ball_y comparison section
-;; BALL_EJECT:
-;; 	;; load in the eject amounts
-;; 	LDA #COLLIS_EJECT_FRAC
-;; 	STA $00
-;; 	LDA #COLLIS_EJECT_INT
-;; 	STA $01
-;; 	;; left or right eject?
-;; 	LDA ball_int_dx
-;; 	BMI right_eject 	; (add)
-;; 	;; else eject to left (sub)
-;; 	JSR NEGATE
-
-;; right_eject:
-;; 	CLC
-;; 	LDA ball_frac_x
-;; 	ADC $00
-;; 	STA ball_frac_x
-;; 	LDA ball_int_x
-;; 	ADC $01
-;; 	STA ball_int_x
-
-;; 	;; if ball is not moving vertically don't eject it vertically
-;; 	LDA ball_int_dy
-;; 	ORA ball_frac_dy
-;; 	BEQ ball_eject_end
-
-;; 	;; reload the eject amounts in case they changed base on the previous calc
-;; 	LDA #COLLIS_EJECT_FRAC
-;; 	STA $00
-;; 	LDA #COLLIS_EJECT_INT
-;; 	STA $01
-
-;; 	;; up or down eject?
-;; 	LDA ball_int_dy
-;; 	BMI down_eject_check	; (add)
-;; 	;; else eject upwards (sub)
-
-;; 	LDA $02			; which paddle y, if any
-;; 	BEQ no_pad
-;; 	;; if this is an eject from a paddle, we must do some extra checks
-
-;; 	;; in this scenario the ball is moving down on the screen and hits
-;; 	;; a paddle. We should see if the ball is near the bottom of the paddle
-;; 	;; if it is, we do not want to eject upwards anymore and should skip the
-;; 	;; NEGATE call
-;; 	LDA $02
-;; 	CLC
-;; 	ADC #$08 		; half the paddle length
-;; 	CMP ball_int_y
-;; 	BCC down_eject		; paddle middle y < ball y
-;; 	JMP no_pad
-
-
-;; no_pad:
-;; 	JSR NEGATE
-;; 	JMP down_eject
-
-;; down_eject_check:
-;; 	LDA $02			; which paddle y, if any
-;; 	BEQ down_eject
-
-;; 	LDA $02
-;; 	CLC
-;; 	ADC #$08 		; half the paddle length
-;; 	CMP ball_int_y
-;; 	BCS down_eject		; paddle middle y >= ball y
-;; 	JMP no_pad
-
-;; down_eject:
-;; 	CLC
-;; 	LDA ball_frac_y
-;; 	ADC $00
-;; 	STA ball_frac_y
-;; 	LDA ball_int_y
-;; 	ADC $01
-;; 	STA ball_int_y
-
-;; ball_eject_end:
-;; 	RTS
-;;; END OF BALL_EJECT
-
 BALL_EJECT:
 	;; load in the eject amounts
 	LDA #COLLIS_EJECT_FRAC
@@ -447,11 +356,12 @@ paddle_revert_end:
 
 	;; respond when the ball bonks on the flat top or bottom
 	;; portion of the paddle
+	;; X = paddle index
 PADDLE_TOP_OR_BOT_COLLIS:
 	;; if paddle and ball are going in the same direction
 	;; we add a little speed to the ball and that's it
 	LDA ball_int_dy
-	EOR $03
+	EOR paddle_int_dy, X
 	BPL ball_paddle_same_dir
 
 	;; in this case, paddle and ball are going opposite directions,
@@ -469,22 +379,22 @@ PADDLE_TOP_OR_BOT_COLLIS:
 	STA ball_int_dy
 
 	;; if paddle is not moving then we're done here
-	LDA $03
-	ORA $02
+	LDA paddle_int_dy, X
+	ORA paddle_frac_dy, X
 	BEQ paddle_top_or_bot_collis_end
 
 
 	;; we add little speed to the paddle speed we saved, then add that
 	;; to the ball's speed
 ball_paddle_same_dir:
-	LDA $03
+	LDA paddle_int_dy, X
 	BPL add_to_paddle_dy
 	;; else sub from paddle_dy
 	SEC
-	LDA $02
+	LDA paddle_frac_dy, X
 	SBC #$40
 	STA $02
-	LDA $03
+	LDA paddle_int_dy, X
 	SBC #$00
 	STA $03
 	JMP add_paddle_dy_to_ball
@@ -492,10 +402,10 @@ ball_paddle_same_dir:
 	;; increase the stored paddle_dy in the positive direction
 add_to_paddle_dy:
 	CLC
-	LDA $02
+	LDA paddle_frac_dy, X
 	ADC #$40
 	STA $02
-	LDA $03
+	LDA paddle_int_dy, X
 	ADC #$00
 	STA $03
 
@@ -558,58 +468,57 @@ n1_greater:
 
 GET_PLAYER_INPUT:
 	;; first store previous frame's inputs
-	LDA ctrl_input_1
-	STA ctrl_prev_input_1
-	LDA ctrl_input_2
-	STA ctrl_prev_input_2
+	LDA ctrl_input
+	STA ctrl_prev_input
+	LDA ctrl_input + 1
+	STA ctrl_prev_input + 1
 
 	;; now get new data
 	LDA #$01
 	STA CONTROLLER_1
-	STA ctrl_input_1
-	STA ctrl_input_2
+	STA ctrl_input
+	STA ctrl_input + 1
 	LDA #$00
 	STA CONTROLLER_1
 
 get_buttons:
 	LDA CONTROLLER_1
 	LSR A
-	ROL ctrl_input_1
+	ROL ctrl_input
 	LDA CONTROLLER_2
 	LSR A
-	ROL ctrl_input_2
+	ROL ctrl_input + 1
 
 	BCC get_buttons
 
 	;; now we find the inputs that were just pressed this frame
-	LDA ctrl_prev_input_1
+	LDA ctrl_prev_input
 	EOR #%11111111
-	AND ctrl_input_1
-	STA ctrl_jp_input_1
+	AND ctrl_input
+	STA ctrl_jp_input
 
-	LDA ctrl_prev_input_2
+	LDA ctrl_prev_input + 1
 	EOR #%11111111
-	AND ctrl_input_2
-	STA ctrl_jp_input_2
+	AND ctrl_input + 1
+	STA ctrl_jp_input + 1
 
 	RTS
 ;;; END OF GET_PLAYER_INPUT ;;;
 
-	;; move the paddles based on controller input
-MOVE_PADDLES:
-	;; start of player 1 movement
-
-	LDA paddle_1_frac_dyy
+	;; move the paddle based on controller input
+	;; the paddle index to be moved is expected to be in X
+MOVE_PADDLE:
+	LDA paddle_frac_dyy, X
 	STA $00
-	LDA paddle_1_int_dyy
+	LDA paddle_int_dyy, X
 	STA $01
 
-	LDA ctrl_input_1
+	LDA ctrl_input, X
 	AND #BTN_UP
-	BNE paddle_1_up_press
-	LDA ctrl_input_1
+	BNE paddle_up_press
+	LDA ctrl_input, X
 	AND #BTN_DOWN
-	BNE paddle_1_down_press
+	BNE paddle_down_press
 	;; nothing pressed? we should decel here
 	LDA #PADDLE_FRAC_DEC_DEF
 	STA $00
@@ -617,34 +526,34 @@ MOVE_PADDLES:
 	STA $01
 
 	;; are we going up or down?
-	LDA paddle_1_int_dy
+	LDA paddle_int_dy, X
 	BPL @decel_sub
 	;; if dy is neg, we're moving up
 	;; decelerate by adding dyy
-	LDA paddle_1_frac_dy
+	LDA paddle_frac_dy, X
 	CLC
 	ADC $00
-	STA paddle_1_frac_dy
+	STA paddle_frac_dy, X
 
-	LDA paddle_1_int_dy
+	LDA paddle_int_dy, X
 	ADC $01
-	STA paddle_1_int_dy
+	STA paddle_int_dy, X
 	JMP @decel_range_check
 
 @decel_sub:
 	SEC
-	LDA paddle_1_frac_dy
+	LDA paddle_frac_dy, X
 	SBC $00
-	STA paddle_1_frac_dy
+	STA paddle_frac_dy, X
 
-	LDA paddle_1_int_dy
+	LDA paddle_int_dy, X
 	SBC $01
-	STA paddle_1_int_dy
+	STA paddle_int_dy, X
 
 @decel_range_check:
-	LDA paddle_1_frac_dy
+	LDA paddle_frac_dy, X
 	STA $00
-	LDA paddle_1_int_dy
+	LDA paddle_int_dy, X
 	STA $01
 
 	LDA #PADDLE_FRAC_DEC_DEF
@@ -652,35 +561,35 @@ MOVE_PADDLES:
 	LDA #PADDLE_INT_DEC_DEF
 	STA $03
 	JSR RANGE_CHECK
-	BNE paddle_1_apply_dy
+	BNE paddle_apply_dy
 	;; if dy is close to 0 then clamp it to 0
 	LDA #$00
-	STA paddle_1_frac_dy
-	STA paddle_1_int_dy
+	STA paddle_frac_dy, X
+	STA paddle_int_dy, X
 
-	JMP paddle_1_apply_dy
+	JMP paddle_apply_dy
 
-paddle_1_up_press:
+paddle_up_press:
 	JSR NEGATE
-	JMP paddle_1_apply_dyy
+	JMP paddle_apply_dyy
 
-paddle_1_down_press:
+paddle_down_press:
 	;; fall through
 
-paddle_1_apply_dyy:
-	LDA paddle_1_frac_dy
+paddle_apply_dyy:
+	LDA paddle_frac_dy, X
 	CLC
 	ADC $00
-	STA paddle_1_frac_dy
+	STA paddle_frac_dy, X
 
-	LDA paddle_1_int_dy
+	LDA paddle_int_dy, X
 	ADC $01
-	STA paddle_1_int_dy
+	STA paddle_int_dy, X
 
 	;; check if vel has gone over max val
-	LDA paddle_1_frac_dy
+	LDA paddle_frac_dy, X
 	STA $00
-	LDA paddle_1_int_dy
+	LDA paddle_int_dy, X
 	STA $01
 
 	LDA #PADDLE_FRAC_DY_MAX
@@ -688,14 +597,14 @@ paddle_1_apply_dyy:
 	LDA #PADDLE_INT_DY_MAX
 	STA $03
 	JSR RANGE_CHECK
-	BEQ paddle_1_apply_dy
+	BEQ paddle_apply_dy
 	;; if non zero returned then we were over max vel, must clamp
 	LDA #PADDLE_INT_DY_MAX
 	STA $01
 	LDA #PADDLE_FRAC_DY_MAX
 	STA $00
 	;; was our original vel pos or neg?
-	LDA paddle_1_int_dy
+	LDA paddle_int_dy, X
 	BPL @store_clamped_dy
 	;; if negative, negate the clamped val
 	JSR NEGATE
@@ -704,234 +613,67 @@ paddle_1_apply_dyy:
 
 	@store_clamped_dy:
 	LDA $00
-	STA paddle_1_frac_dy
+	STA paddle_frac_dy, X
 	LDA $01
-	STA paddle_1_int_dy
+	STA paddle_int_dy, X
 
 	;; fall through
 
-paddle_1_apply_dy:
-	LDA paddle_1_frac_y
+paddle_apply_dy:
+	LDA paddle_frac_y, X
 	CLC
-	ADC paddle_1_frac_dy
-	STA paddle_1_frac_y
+	ADC paddle_frac_dy, X
+	STA paddle_frac_y, X
 
-	LDA paddle_1_int_y
-	ADC paddle_1_int_dy
-	STA paddle_1_int_y
+	LDA paddle_int_y, X
+	ADC paddle_int_dy, X
+	STA paddle_int_y, X
 
 
 	;; floor/ceiling check
-	LDA paddle_1_int_dy
-	BPL paddle_1_floor_check
+	LDA paddle_int_dy, X
+	BPL paddle_floor_check
 	;; else check for ceiling collis
 
-	LDA paddle_1_int_y
+	LDA paddle_int_y, X
 	CMP #TOP_WALL
-	BCC paddle_1_up_snap	; if touching or beyond top, snap into it
-	JMP paddle_1_move_done
+	BCC paddle_up_snap	; if touching or beyond top, snap into it
+	JMP paddle_move_done
 
-paddle_1_floor_check:
-	LDA paddle_1_int_y
+paddle_floor_check:
+	LDA paddle_int_y, X
 	CLC
 	ADC #PADDLE_LEN		; get bottom of paddle
 	CMP #BOTTOM_WALL
-	BCS paddle_1_down_snap
-	JMP paddle_1_move_done
+	BCS paddle_down_snap
+	JMP paddle_move_done
 
-paddle_1_down_snap:
+paddle_down_snap:
 	LDA #BOTTOM_WALL
 	SEC
 	SBC #PADDLE_LEN
-	STA paddle_1_int_y
+	STA paddle_int_y, X
 	LDA #$00
-	STA paddle_1_frac_y
+	STA paddle_frac_y, X
 	;; also set dy to 0 when we hit floor
-	STA paddle_1_int_dy
-	STA paddle_1_frac_dy
-	JMP paddle_1_move_done
+	STA paddle_int_dy, X
+	STA paddle_frac_dy, X
+	JMP paddle_move_done
 
-paddle_1_up_snap:
+paddle_up_snap:
 	LDA #TOP_WALL
-	STA paddle_1_int_y
+	STA paddle_int_y, X
 	LDA #$00
-	STA paddle_1_frac_y
+	STA paddle_frac_y, X
 	;; also set dy to 0 when we hit ceiling
-	STA paddle_1_int_dy
-	STA paddle_1_frac_dy
-	JMP paddle_1_move_done
+	STA paddle_int_dy, X
+	STA paddle_frac_dy, X
+	JMP paddle_move_done
 
-	;; end of paddle 1 movement
-paddle_1_move_done:
-
-	;; now for paddle 2
-	LDA paddle_2_frac_dyy
-	STA $00
-	LDA paddle_2_int_dyy
-	STA $01
-
-	LDA ctrl_input_2
-	AND #BTN_UP
-	BNE paddle_2_up_press
-	LDA ctrl_input_2
-	AND #BTN_DOWN
-	BNE paddle_2_down_press
-	;; nothing pressed? we should decel here
-	LDA #PADDLE_FRAC_DEC_DEF
-	STA $00
-	LDA #PADDLE_INT_DEC_DEF
-	STA $01
-
-	;; are we going up or down?
-	LDA paddle_2_int_dy
-	BPL @decel_sub
-	;; if dy is neg, we're moving up
-	;; decelerate by adding dyy
-	LDA paddle_2_frac_dy
-	CLC
-	ADC $00
-	STA paddle_2_frac_dy
-
-	LDA paddle_2_int_dy
-	ADC $01
-	STA paddle_2_int_dy
-	JMP @decel_range_check
-
-@decel_sub:
-	SEC
-	LDA paddle_2_frac_dy
-	SBC $00
-	STA paddle_2_frac_dy
-
-	LDA paddle_2_int_dy
-	SBC $01
-	STA paddle_2_int_dy
-
-@decel_range_check:
-	LDA paddle_2_frac_dy
-	STA $00
-	LDA paddle_2_int_dy
-	STA $01
-
-	LDA #PADDLE_FRAC_DEC_DEF
-	STA $02
-	LDA #PADDLE_INT_DEC_DEF
-	STA $03
-	JSR RANGE_CHECK
-	BNE paddle_2_apply_dy
-	;; if dy is close to 0 then clamp it to 0
-	LDA #$00
-	STA paddle_2_frac_dy
-	STA paddle_2_int_dy
-
-	JMP paddle_2_apply_dy
-
-paddle_2_up_press:
-	JSR NEGATE
-	JMP paddle_2_apply_dyy
-
-paddle_2_down_press:
-	;; fall through
-
-paddle_2_apply_dyy:
-	LDA paddle_2_frac_dy
-	CLC
-	ADC $00
-	STA paddle_2_frac_dy
-
-	LDA paddle_2_int_dy
-	ADC $01
-	STA paddle_2_int_dy
-
-	;; check if vel has gone over max val
-	LDA paddle_2_frac_dy
-	STA $00
-	LDA paddle_2_int_dy
-	STA $01
-
-	LDA #PADDLE_FRAC_DY_MAX
-	STA $02
-	LDA #PADDLE_INT_DY_MAX
-	STA $03
-	JSR RANGE_CHECK
-	BEQ paddle_2_apply_dy
-	;; if non zero returned then we were over max vel, must clamp
-	LDA #PADDLE_INT_DY_MAX
-	STA $01
-	LDA #PADDLE_FRAC_DY_MAX
-	STA $00
-	;; was our original vel pos or neg?
-	LDA paddle_2_int_dy
-	BPL @store_clamped_dy
-	;; if negative, negate the clamped val
-	JSR NEGATE
-
-	;; fall through
-
-	@store_clamped_dy:
-	LDA $00
-	STA paddle_2_frac_dy
-	LDA $01
-	STA paddle_2_int_dy
-
-	;; fall through
-
-paddle_2_apply_dy:
-	LDA paddle_2_frac_y
-	CLC
-	ADC paddle_2_frac_dy
-	STA paddle_2_frac_y
-
-	LDA paddle_2_int_y
-	ADC paddle_2_int_dy
-	STA paddle_2_int_y
-
-
-	;; floor/ceiling check
-	LDA paddle_2_int_dy
-	BPL paddle_2_floor_check
-	;; else check for ceiling collis
-
-	LDA paddle_2_int_y
-	CMP #TOP_WALL
-	BCC paddle_2_up_snap	; if touching or beyond top, snap into it
-	JMP paddle_2_move_done
-
-paddle_2_floor_check:
-	LDA paddle_2_int_y
-	CLC
-	ADC #PADDLE_LEN		; get bottom of paddle
-	CMP #BOTTOM_WALL
-	BCS paddle_2_down_snap
-	JMP paddle_2_move_done
-
-paddle_2_down_snap:
-	LDA #BOTTOM_WALL
-	SEC
-	SBC #PADDLE_LEN
-	STA paddle_2_int_y
-	LDA #$00
-	STA paddle_2_frac_y
-	;; also set dy to 0 when we hit floor
-	STA paddle_2_int_dy
-	STA paddle_2_frac_dy
-	JMP paddle_2_move_done
-
-paddle_2_up_snap:
-	LDA #TOP_WALL
-	STA paddle_2_int_y
-	LDA #$00
-	STA paddle_2_frac_y
-	;; also set dy to 0 when we hit ceiling
-	STA paddle_2_int_dy
-	STA paddle_2_frac_dy
-	JMP paddle_2_move_done
-
-	;; end of paddle 2 movement
-
-paddle_2_move_done:
+paddle_move_done:
 	RTS
-;;; END OF MOVE_PADDLES ;;;
+;;; END OF MOVE_PADDLE ;;;
+
 
 BALL_CEILING_COLLIS:
 	LDA #TOP_WALL
@@ -1234,116 +976,123 @@ MOVE_BALL:
 	RTS
 ;;; END OF MOVE_BALL ;;;
 
-
-	;; checks to see if the ball is in an appropriate position
-	;; to be considered colliding with the left paddle
-	;; this function expects the right side of the left paddle
-	;; to be in the accumulator
-LEFT_PADDLE_AREA_CHECK:
-	;; first: is left side of ball reaching the paddle yet?
-	CMP ball_int_x
-	BCC left_paddle_miss
-
-	;; second: is the right side of the ball beyond the left
-	;; side of the paddle
+	;; X = paddle index
+BALL_PADDLE_COLLISION_CHECK:
+	;; right side of ball vs left side of paddle
 	LDA ball_int_x
 	CLC
-	ADC #$02
-	CMP #PADDLE_1_X
-	BCC left_paddle_miss
+	ADC #BALL_DIAMETER
+	CMP paddle_int_x, X
+	BCC paddle_miss
 
-	;; third: is bottom of ball under top of paddle
+	;; right side of paddle vs left side of ball
+	LDA paddle_int_x, X
+	CLC
+	ADC #PADDLE_WIDTH
+	CMP ball_int_x
+	BCC paddle_miss
+
+	;; bottom of ball vs top of paddle
 	LDA ball_int_y
 	CLC
 	ADC #BALL_DIAMETER
-	CMP paddle_1_int_y
-	BCC left_paddle_miss
+	CMP paddle_int_y, X
+	BCC paddle_miss
 
-	;; fourth: is top of ball over bottom of paddle?
-	LDA paddle_1_int_y
+	;; bottom of paddle vs top of ball
+	LDA paddle_int_y, X
 	CLC
 	ADC #PADDLE_LEN
 	CMP ball_int_y
-	BCC left_paddle_miss
+	BCC paddle_miss
 
-	;; seems like we did in fact collide
+	;; seems like we did collide if we made it here
 	LDA #$01
-	JMP left_paddle_area_check_done
-
-left_paddle_miss:
-	LDA #$00
-left_paddle_area_check_done:
 	RTS
-;;; END OF LEFT_PADDLE_AREA_CHECK ;;;
 
-BALL_LEFT_PADDLE_COLLIS:
-	;; check if ball is within paddle
-	LDA #PADDLE_1_X
+paddle_miss:
+	LDA #$00
+	RTS
+;;; END OF BALL_PADDLE_COLLISION_CHECK ;;;
+
+	;; X = paddle index
+BALL_PADDLE_COLLISION:
+	JSR BALL_PADDLE_COLLISION_CHECK
+	BEQ no_paddle_collis
+
+	;; add these values to memory to use within function
+	LDA paddle_int_dy, X
+	STA $03
+	LDA paddle_frac_dy, X
+	STA $02
+
+	LDA paddle_int_y, X
+	STA $05
+	LDA paddle_frac_y, X
+	STA $04
+
+	;; collision definitely happened
+	;; we're going to cut short the physics calcs after this
+	;; so we have at least 1 frame of the ball touching the
+	;; paddle
+	LDA #$01
+	STA $08
+	;; are we going to count it as vertical or horizontal?
+paddle_test_eject:
+	;; horiz checks
+	;; we check if the ball is hitting the side of both paddles here
+	;; because it ends up being simpler than checking which paddle
+	;; we're at and they're mutually exclusive so we shouldn't
+	;; get any false positives
+	LDA ball_int_x
+	CLC
+	ADC #BALL_DIAMETER
+	CMP paddle_int_x, X
+	BEQ paddle_horiz_collis
+	
+	LDA paddle_int_x, X
 	CLC
 	ADC #PADDLE_WIDTH
-	TAX			; save right side of paddle in X
-	JSR LEFT_PADDLE_AREA_CHECK
-	BEQ no_left_paddle_collis
-
-	;; add these values to memory to use within function
-	LDA paddle_2_int_dy
-	STA $03
-	LDA paddle_2_frac_dy
-	STA $02
-
-	LDA paddle_2_int_y
-	STA $05
-	LDA paddle_2_frac_y
-	STA $04
-
-	;; collision definitely happened
-	;; we're going to cut short the physics calcs after this
-	;; so we have at least 1 frame of the ball touching the
-	;; paddle
-	LDA #$01
-	STA $08
-	;; are we going to count it as vertical or horizontal?
-left_paddle_test_eject:
-	TXA			; retrieve right side of paddle
 	CMP ball_int_x
-	BEQ left_paddle_horiz_collis
-	LDA paddle_1_int_y
+	BEQ paddle_horiz_collis
+	
+	;; vertical checks
+	LDA paddle_int_y, X
 	CLC
 	ADC #PADDLE_LEN
 	CMP ball_int_y
-	BEQ left_paddle_top_or_bot_collis
-	LDA paddle_1_int_y
+	BEQ paddle_top_or_bot_collis
+	LDA paddle_int_y, X
 	SEC
 	SBC #BALL_DIAMETER
-	CMP ball_int_y
-	BEQ left_paddle_top_or_bot_collis
+	CMP ball_int_x, X
+	BEQ paddle_top_or_bot_collis
 
 	;; if none of above conditions are met, we readjust the ball
 	;; then loop back up to try again
-	;; flag stored in 2 is which paddle, if any
 	JSR BALL_EJECT
 
 	;; if BALL_EJECT changes paddle then we should
 	;; reflect the change here
-	LDA $05
-	STA paddle_2_int_y
-	LDA $04
-	STA paddle_2_frac_y
+	;; LDA $05
+	;; STA paddle_2_int_y
+	;; LDA $04
+	;; STA paddle_2_frac_y
 	
 	;; else no hit, do another loop
-	JMP left_paddle_test_eject
+	JMP paddle_test_eject
 
 	;; if we get a top/bot collis we just reflect Y velocity and carry on
-left_paddle_top_or_bot_collis:
-	LDA paddle_1_frac_dy
-	STA $02
-	LDA paddle_1_int_dy
-	STA $03
+paddle_top_or_bot_collis:
 	JSR PADDLE_TOP_OR_BOT_COLLIS
-	JMP no_left_paddle_collis
+	JMP no_paddle_collis
 
-left_paddle_horiz_collis:
-	LDA paddle_1_int_y
+paddle_horiz_collis:
+	;; first save our paddle index on the stack
+	TXA
+	PHA
+	
+	LDA paddle_int_y, X
 	CLC
 	ADC #PADDLE_LEN
 	SEC
@@ -1351,10 +1100,12 @@ left_paddle_horiz_collis:
 	;; if ball hits riiight on the bottom of the paddle then
 	;; this actually ends up underflowing and breaks, so we just
 	;; manually manipulate so it takes the desired angle
-	BNE left_paddle_normal_collis
+	BNE paddle_normal_collis
 	LDA #$01
 
-left_paddle_normal_collis:
+	;; fall through
+
+paddle_normal_collis:
 	SEC
 	SBC #$01
 	ASL
@@ -1366,140 +1117,12 @@ left_paddle_normal_collis:
 	STA pointerHi
 	JSR HORIZ_ANGLE_SET
 
-no_left_paddle_collis:
-	RTS
-;;; END OF LEFT_PADDLE_COLLIS ;;;
-
-
-	;; checks to see if the ball is in an appropriate position
-	;; to be considered colliding with the right paddle
-	;; this function expects the right side of the ball
-	;; to be in the accumulator
-RIGHT_PADDLE_AREA_CHECK:
-	;; first: is right side of ball reaching the paddle yet?
-	CMP #PADDLE_2_X
-	BCC right_paddle_miss
-
-	;; second: is left side of ball beyond the paddle
-	LDA #PADDLE_2_X
-	CLC
-	ADC #$02
-	CMP ball_int_x
-	BCC right_paddle_miss
-
-	;; third: is bottom of ball under top of paddle?
-	LDA ball_int_y
-	CLC
-	ADC #BALL_DIAMETER	; get bottom of ball sprite
-	CMP paddle_2_int_y
-	BCC right_paddle_miss
-
-	;; fourth: is top of ball over bottom of paddle?
-	LDA paddle_2_int_y
-	CLC
-	ADC #PADDLE_LEN
-	CMP ball_int_y
-	BCC right_paddle_miss
-
-	;; seems like we did in fact collide
-	LDA #$01
-	JMP right_paddle_area_check_done
-
-right_paddle_miss:
-	LDA #$00
-right_paddle_area_check_done:
-	RTS
-;;; END OF RIGHT_PADDLE_AREA_CHECK ;;;
-
-BALL_RIGHT_PADDLE_COLLIS:
-	;; check if ball is within paddle
-	LDA ball_int_x
-	CLC
-	ADC #BALL_DIAMETER	; get right side
-	JSR RIGHT_PADDLE_AREA_CHECK
-	BEQ no_right_paddle_collis
-
-	;; add these values to memory to use within function
-	LDA paddle_2_int_dy
-	STA $03
-	LDA paddle_2_frac_dy
-	STA $02
-
-	LDA paddle_2_int_y
-	STA $05
-	LDA paddle_2_frac_y
-	STA $04
-
-	;; collision definitely happened
-	;; we're going to cut short the physics calcs after this
-	;; so we have at least 1 frame of the ball touching the
-	;; paddle
-	LDA #$01
-	STA $08
-	;; are we going to count it as vertical or horizontal?
-right_paddle_test_eject:
-	LDA ball_int_x
-	CLC
-	ADC #BALL_DIAMETER	; get right side
-	CMP #PADDLE_2_X
-	BEQ right_paddle_horiz_collis
-	LDA paddle_2_int_y
-	CLC
-	ADC #PADDLE_LEN
-	CMP ball_int_y
-	BEQ right_paddle_top_or_bot_collis
-	LDA paddle_2_int_y
-	SEC
-	SBC #BALL_DIAMETER
-	CMP ball_int_y
-	BEQ right_paddle_top_or_bot_collis
-
-	;; if none of above conditions are met, we readjust the ball
-	;; then loop back up to try again
-	JSR BALL_EJECT
-
-	;; if BALL_EJECT changes paddle then we should
-	;; reflect the change here
-	LDA $05
-	STA paddle_2_int_y
-	LDA $04
-	STA paddle_2_frac_y
-	
-
-	;; else no hit, do another loop
-	JMP right_paddle_test_eject
-
-	;; if we get a top/bot collis we just reflect Y velocity and carry on
-right_paddle_top_or_bot_collis:
-	JSR PADDLE_TOP_OR_BOT_COLLIS
-	JMP no_right_paddle_collis
-
-right_paddle_horiz_collis:
-	LDA paddle_2_int_y
-	CLC
-	ADC #PADDLE_LEN
-	SEC
-	SBC ball_int_y
-	;; if ball hits riiight on the bottom of the paddle then
-	;; this actually ends up underflowing and breaks, so we just
-	;; manually manipulate so it takes the desired angle
-	BNE right_paddle_normal_collis
-	LDA #$01
-
-right_paddle_normal_collis:
-	SEC
-	SBC #$01
-	ASL
+	;; quick check if this is left or right paddle
+	PLA			; get index back from stack
 	TAX
-	LDA horiz_angle_table, X
-	STA pointerLo
-	INX
-	LDA horiz_angle_table, X
-	STA pointerHi
-	JSR HORIZ_ANGLE_SET
-
-	;; set the horiz speeds to negative vals because we're bouncing
-	;; off right paddle
+	BEQ no_paddle_collis
+	;; if it's right paddle we need to reflect new horiz
+	;; speed
 	LDA ball_frac_dx
 	STA $00
 	LDA ball_int_dx
@@ -1510,9 +1133,11 @@ right_paddle_normal_collis:
 	LDA $01
 	STA ball_int_dx
 
-no_right_paddle_collis:
+	;; fall through
+
+no_paddle_collis:
 	RTS
-;;; END OF RIGHT_PADDLE_COLLIS ;;;
+;;; END OF BALL_PADDLE_COLLISION
 
 	;; Draws the scoreboard at the top of the screen
 DRAW_SCORE:
@@ -1661,19 +1286,23 @@ insideloop:
 	STA PPUMASK
 
 	;; set initial vals for paddles
+	LDA #PADDLE_1_X
+	STA paddle_int_x
+	LDA #PADDLE_2_X
+	STA paddle_int_x + 1
+	
 	LDA #PADDLE_FRAC_DYY_DEF
-	STA paddle_1_frac_dyy
-	STA paddle_2_frac_dyy
+	STA paddle_frac_dyy
+	STA paddle_frac_dyy + 1
 
 	LDA #PADDLE_INT_DYY_DEF
-	STA paddle_1_int_dyy
-	STA paddle_2_int_dyy
+	STA paddle_int_dyy
+	STA paddle_int_dyy + 1
 
 	LDA #PADDLE_START_Y
-	STA paddle_1_int_y
+	STA paddle_int_y
+	STA paddle_int_y + 1
 
-	LDA #PADDLE_START_Y
-	STA paddle_2_int_y
 
 	;; set up initial vals for ball
 	JSR SET_ANGLE_ZERO
@@ -1691,12 +1320,12 @@ insideloop:
 	STA nmt_len
 	STA frame_counter
 	STA gen_counter
-	STA paddle_1_frac_y
-	STA paddle_1_frac_dy
-	STA paddle_1_int_dyy
-	STA paddle_2_frac_y
-	STA paddle_2_frac_dy
-	STA paddle_2_int_dyy
+	STA paddle_frac_y
+	STA paddle_frac_dy
+	STA paddle_int_dyy
+	STA paddle_frac_y + 1
+	STA paddle_frac_dy + 1
+	STA paddle_int_dyy + 1
 	STA ball_frac_x
 	STA ball_remndr_x
 	STA ball_int_dy
@@ -1757,7 +1386,10 @@ SERVE:
 	STA $08
 @phys_loop:
 	;; move the paddles
-	JSR MOVE_PADDLES
+	LDX #$00
+	JSR MOVE_PADDLE
+	INX
+	JSR MOVE_PADDLE
 
 	DEC $08
 	BNE @phys_loop
@@ -1766,19 +1398,19 @@ SERVE:
 	;; keep the ball on the one serving
 	LDA serving
 	BNE p2_serve
-	LDA paddle_1_int_y
+	LDA paddle_int_y
 	CLC
 	ADC #$06		; keep ball at middle of paddle
 	STA ball_int_y
 
-	LDA #PADDLE_1_X
+	LDA paddle_int_x
 	CLC
 	ADC #$0A		; 10 pixels from paddle 1
 	STA ball_int_x
 
 	;; now check if the player pressed A to serve
 	;; if A not pressed, move on
-	LDA ctrl_jp_input_1
+	LDA ctrl_jp_input
 	AND #BTN_A
 	BEQ serve_done
 
@@ -1786,19 +1418,19 @@ SERVE:
 	RTS
 
 p2_serve:
-	LDA paddle_2_int_y
+	LDA paddle_int_y + 1
 	CLC
 	ADC #$06		; keep ball at middle of paddle
 	STA ball_int_y
 
-	LDA #PADDLE_2_X
+	LDA paddle_int_x + 1
 	SEC
 	SBC #$0A		; 10 pixels from paddle 2
 	STA ball_int_x
 
 	;; now check if the player pressed A to serve
 	;; if A not pressed, move on
-	LDA ctrl_jp_input_2
+	LDA ctrl_jp_input + 1
 	AND #BTN_A
 	BEQ serve_done
 
@@ -1816,7 +1448,10 @@ PLAY:
 	STA $08
 @phys_loop:
 	;; move the paddles
-	JSR MOVE_PADDLES
+	LDX #$00
+	JSR MOVE_PADDLE
+	INX
+	JSR MOVE_PADDLE
 
 	;; move the ball
 	JSR MOVE_BALL
@@ -1841,7 +1476,8 @@ PLAY:
 	BCC player_2_score
 
 	;; then check for left side paddle collis
-	JSR BALL_LEFT_PADDLE_COLLIS
+	LDX #$00
+	JSR BALL_PADDLE_COLLISION
 	JMP @phys_loop_end
 
 	@right_side_checks:
@@ -1853,7 +1489,8 @@ PLAY:
 	BCS player_1_score
 
 	;; then check for right side paddle collis
-	JSR BALL_RIGHT_PADDLE_COLLIS
+	LDX #$01
+	JSR BALL_PADDLE_COLLISION
 
 	;; fall through
 
@@ -2001,7 +1638,7 @@ display_game_over:
 
 GAME_END_CHECK_LOOP:
 	JSR GET_PLAYER_INPUT
-	LDX ctrl_jp_input_1
+	LDX ctrl_jp_input
 	TXA
 	AND #BTN_A
 	BNE game_end_select
@@ -2044,10 +1681,10 @@ back_to_start:
 reset_game:
 	;; set up initial for paddles etc again
 	LDA #PADDLE_START_Y
-	STA paddle_1_int_y
+	STA paddle_int_y
 
 	LDA #PADDLE_START_Y
-	STA paddle_2_int_y
+	STA paddle_int_y + 1
 
 	;; JSR SET_ANGLE_ZERO
 
@@ -2112,7 +1749,7 @@ COMMON_END:
 	;; ball finished
 	;; start paddles
 
-	LDA paddle_1_int_y
+	LDA paddle_int_y
 	STA $0204
 
 	LDA #$01
@@ -2122,11 +1759,11 @@ COMMON_END:
 	STA $0206
 
 	;; don't think this is necessary because X doesn't change
-	LDA #PADDLE_1_X
+	LDA paddle_int_x
 	STA $0207
 
 	;; paddle 1, lower block
-	LDA paddle_1_int_y
+	LDA paddle_int_y
 	CLC
 	ADC #$08
 	STA $0208
@@ -2138,11 +1775,11 @@ COMMON_END:
 	STA $020A
 
 	;; don't think this is necessary because X doesn't change
-	LDA #PADDLE_1_X
+	LDA paddle_int_x
 	STA $020B
 	;; paddle 1 done
 
-	LDA paddle_2_int_y
+	LDA paddle_int_y + 1
 	STA $020C
 
 	LDA #$01
@@ -2152,11 +1789,11 @@ COMMON_END:
 	STA $020E
 
 	;; don't think this is necessary because X doesn't change
-	LDA #PADDLE_2_X
+	LDA paddle_int_x + 1
 	STA $020F
 
 	;; paddle 2, lower block
-	LDA paddle_2_int_y
+	LDA paddle_int_y + 1
 	CLC
 	ADC #$08
 	STA $0210
@@ -2168,7 +1805,7 @@ COMMON_END:
 	STA $0212
 
 	;; don't think this is necessary because X doesn't change
-	LDA #PADDLE_2_X
+	LDA paddle_int_x + 1
 	STA $0213
 
 	LDA cursor_y
