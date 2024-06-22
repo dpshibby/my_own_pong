@@ -469,7 +469,7 @@ TITLE_SCREEN:
 TITLE_SCREEN_LOOP:
 	JSR GET_PLAYER_INPUT
 
-	LDA ctrl_input_1
+	LDA ctrl_input
 	AND #BTN_START
 	BNE start
 	JSR PRESS_START_ANIM
@@ -520,7 +520,7 @@ TITLE_SCREEN_MENU:
 
 TITLE_SCREEN_MENU_LOOP:
 	JSR GET_PLAYER_INPUT
-	LDX ctrl_jp_input_1
+	LDX ctrl_jp_input
 	TXA
 	AND #BTN_B
 	BNE back_to_title
@@ -685,7 +685,7 @@ OPTIONS_MENU:
 
 OPTIONS_MENU_LOOP:
 	JSR GET_PLAYER_INPUT
-	LDX ctrl_jp_input_1
+	LDX ctrl_jp_input
 	TXA
 	AND #BTN_B
 	BNE leave_options_menu
@@ -787,7 +787,7 @@ OPTION_SCORE_TO_WIN:
 
 OPTION_SCORE_TO_WIN_LOOP:
 	JSR GET_PLAYER_INPUT
-	LDX ctrl_jp_input_1
+	LDX ctrl_jp_input
 	TXA
 	AND #BTN_RIGHT
 	BNE @inc_setting
