@@ -1,12 +1,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; TODO:
 ;;;
-;;; * The object pools method seems to be working very well at first glance!
+;;; * Menu entries mostly work
+;;; 
+;;; * Need to finish MODIFY_SETTING func to be able to adjust menu variables
 ;;;
-;;; * Do some extra testing, especially on tricky angles
-;;;
-;;; * The freakin both sides check thing blew up, looks like we'll have to check
-;;;   which paddle we're hitting to make the eject test work properly
+;;; * Re-wrote the display menu setting but it's definitely not working
+;;;   must debug
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 	.include "header.asm"
@@ -22,7 +22,7 @@
 	.addr 0		; IRQ unused
 
 	;; Game specific constants
-	NUM_PLAYERS = 2
+	NUM_PLAYERS         = 2
 
 	TOP_WALL            = $1F
 	RIGHT_WALL          = $FB
@@ -45,6 +45,8 @@
 	BALL_START_Y        = $FF
 	BALL_DIAMETER       = $04
 
+	WIN_SCORE_DEF       = $05
+
 	COLLIS_EJECT_INT    = $00
 	COLLIS_EJECT_FRAC   = $40
 
@@ -52,10 +54,9 @@
 pointerLo:	   .res 1	; pointer vars for 2byte addr
 pointerHi:	   .res 1
 
-p1_score_MSB:	   .res 1
-p1_score_LSB:	   .res 1
-p2_score_MSB:	   .res 1
-p2_score_LSB:	   .res 1
+p1_score:	   .res 1
+p2_score:	   .res 1
+
 serving:	   .res 1	; 0 for p1, 1 for p2
 				; this variable is also used to check which
 				; player scored, 1 for p1, 0 for p2
@@ -64,6 +65,7 @@ game_over:	   .res 1	; 1 = p1 won, 2 = p2 won
 win_score_MSB:	   .res 1
 win_score_LSB:	   .res 1
 
+win_score:	   .res 1
 
 ctrl_input:	   .res NUM_PLAYERS
 ctrl_prev_input:   .res NUM_PLAYERS
@@ -76,6 +78,7 @@ paddle_int_dy:	   .res NUM_PLAYERS
 paddle_frac_dy:	   .res NUM_PLAYERS
 paddle_int_dyy:	   .res NUM_PLAYERS
 paddle_frac_dyy:   .res NUM_PLAYERS
+paddle_palette:	   .res NUM_PLAYERS
 
 ball_int_x:        .res 1
 ball_frac_x:	   .res 1
@@ -91,6 +94,7 @@ ball_remndr_y:	   .res 1
 
 cursor_y:	   .res 1
 cursor_up:	   .res 1
+
 selected_option:   .res 1
 select_type:	   .res 1
 
@@ -121,8 +125,6 @@ NMI:
 	TYA
 	PHA
 
-	LDA #$01
-	STA $0A
 	;; setup and do DMA from addr $0200
 	LDA #$00
 	STA OAMADDR
@@ -243,6 +245,34 @@ vblankwait2:			; wait for second vblank
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; MAIN function subroutines ;;;
+
+	;; This converts an 8 bit number to a tens and ones place number
+	;; $06 = input number
+	;; return 10s place in $04
+	;; return 1s place in $05
+BIN_TO_DEC:
+	LDA #$00
+	STA $04
+	STA $05
+	LDA $06
+tens:
+	SEC
+	SBC #$0A
+	BMI ones
+	INC $04
+	STA $06
+	JMP tens
+
+ones:
+	LDA $06
+	BEQ @done
+	INC $05
+	DEC $06
+	JMP ones
+
+	@done:
+	RTS
+;;; END OF BIN_TO_DEC ;;;
 
 	;; NEGATE expects low (frac) byte in $00
 	;; and high in $01 and returns them in the same
@@ -1156,15 +1186,18 @@ DRAW_SCORE:
 	INY
 
 
-	LDA p1_score_MSB
+	LDA p1_score
+	STA $06
+	JSR BIN_TO_DEC
+	LDA $04
 	CLC
-	ADC #$40		; MSB of score
+	ADC #$40		; tens place of score
 	STA nmt_buffer, Y
 	INY
 
-	LDA p1_score_LSB
+	LDA $05
 	CLC
-	ADC #$40		; LSB of score
+	ADC #$40		; ones place of score
 	STA nmt_buffer, Y
 	INY
 
@@ -1187,15 +1220,18 @@ DRAW_SCORE:
 	STA nmt_buffer, Y
 	INY
 
-	LDA p2_score_MSB
+	LDA p2_score
+	STA $06
+	JSR BIN_TO_DEC
+	LDA $04
 	CLC
-	ADC #$40		; MSB of score
+	ADC #$40		; tens place of score
 	STA nmt_buffer, Y
 	INY
 
-	LDA p2_score_LSB
+	LDA $05
 	CLC
-	ADC #$40		; LSB of score
+	ADC #$40		; ones place
 	STA nmt_buffer, Y
 	INY
 
@@ -1279,25 +1315,6 @@ insideloop:
 	LDA #%00011110		; turn screen on
 	STA PPUMASK
 
-	;; set initial vals for paddles
-	LDA #PADDLE_1_X
-	STA paddle_int_x
-	LDA #PADDLE_2_X
-	STA paddle_int_x + 1
-	
-	LDA #PADDLE_FRAC_DYY_DEF
-	STA paddle_frac_dyy
-	STA paddle_frac_dyy + 1
-
-	LDA #PADDLE_INT_DYY_DEF
-	STA paddle_int_dyy
-	STA paddle_int_dyy + 1
-
-	LDA #PADDLE_START_Y
-	STA paddle_int_y
-	STA paddle_int_y + 1
-
-
 	;; set up initial vals for ball
 	JSR SET_ANGLE_ZERO
 
@@ -1314,6 +1331,8 @@ insideloop:
 	STA nmt_len
 	STA frame_counter
 	STA gen_counter
+	STA paddle_palette
+	STA paddle_palette + 1
 	STA paddle_frac_y
 	STA paddle_frac_dy
 	STA paddle_int_dyy
@@ -1326,12 +1345,9 @@ insideloop:
 	STA ball_frac_y
 	STA ball_frac_dy
 	STA ball_remndr_y
-	STA p1_score_MSB
-	STA p1_score_LSB
-	STA p2_score_MSB
-	STA p2_score_LSB
+	STA p1_score
+	STA p2_score
 	STA game_over
-	STA win_score_MSB
 	STA serving
 	STA soft_ppumask
 	STA need_ppureg
@@ -1345,10 +1361,10 @@ insideloop:
 	STA cursor_y
 
 	LDA #$05
-	STA win_score_LSB
+	STA win_score
 
 	;; uncomment for quick start/debug mode
-	.include "debug.asm"
+	;; .include "debug.asm"
 
 	JMP TITLE_SCREEN
 	.include "title_screen.asm"
@@ -1513,47 +1529,25 @@ SCORE:
 	BEQ p2_scored
 
 	;; else p1 scored
-	INC p1_score_LSB
-	LDA p1_score_LSB
-	CMP #$0A
-	BNE @game_end_test
-	INC p1_score_MSB
-	LDA #$00
-	STA p1_score_LSB
+	INC p1_score
 
-@game_end_test:
 	;; now check if game has ended
-	LDA p1_score_MSB
-	CMP win_score_MSB
+	LDA p1_score
+	CMP win_score
 	BNE score_end
-	;; MSB is same, now try LSB
-	LDA p1_score_LSB
-	CMP win_score_LSB
-	BNE score_end
-	;; if both are the same, set game over val
+	;; if p1 hit the target score, set game over val
 	LDA #$01
 	STA game_over
 	JMP score_end
 
 p2_scored:
-	INC p2_score_LSB
-	LDA p2_score_LSB
-	CMP #$0A
-	BNE @game_end_test
-	INC p2_score_MSB
-	LDA #$00
-	STA p2_score_LSB
+	INC p2_score
 
-@game_end_test:
 	;; now check if game has ended
-	LDA p2_score_MSB
-	CMP win_score_MSB
+	LDA p2_score
+	CMP win_score
 	BNE score_end
-	;; MSB is same, now try LSB
-	LDA p2_score_LSB
-	CMP win_score_LSB
-	BNE score_end
-	;; if both are the same, set game over val
+	;; if p2 hit the target score, set game over val
 	LDA #$01
 	STA game_over
 	;; fall through
@@ -1599,27 +1593,51 @@ GAME_END_CHECK:
 	LDA #$00
 	STA $00
 	STA $01
+	LDA #WINNER_MSB
+	STA $02
+	LDA #WINNER_LSB
+	STA $03
 	LDA serving
 	BEQ p2_wins
 	;; else p1 wins
-	LDA #P1_WIN_I
+	LDA #<p1_win
+	STA pointerLo
+	LDA #>p1_win
+	STA pointerHi
 	JMP display_game_over
 
 game_not_over:
 	RTS
 
 p2_wins:
-	LDA #P2_WIN_I
+	LDA #<p2_win
+	STA pointerLo
+	LDA #>p2_win
+	STA pointerHi
 	JMP display_game_over
 
 display_game_over:
-	JSR WRITE_TXT
+	JSR WRITE_TEXT
 	;; load options for replay/quit
-	LDA #PLAY_AG_I
-	JSR WRITE_TXT
+	LDA #PLAY_AG_MSB
+	STA $02
+	LDA #PLAY_AG_LSB
+	STA $03
+	LDA #<play_again
+	STA pointerLo
+	LDA #>play_again
+	STA pointerHi
+	JSR WRITE_TEXT
 
-	LDA #QUIT_I
-	JSR WRITE_TXT
+	LDA #QUIT_MSB
+	STA $02
+	LDA #QUIT_LSB
+	STA $03
+	LDA #<quit
+	STA pointerLo
+	LDA #>quit
+	STA pointerHi
+	JSR WRITE_TEXT
 
 	LDY nmt_len
 	LDA #$00
@@ -1683,10 +1701,8 @@ reset_game:
 	;; JSR SET_ANGLE_ZERO
 
 	LDA #$00
-	STA p1_score_LSB
-	STA p1_score_MSB
-	STA p2_score_LSB
-	STA p2_score_MSB
+	STA p1_score
+	STA p2_score
 
 	STA game_over
 
@@ -1749,7 +1765,7 @@ COMMON_END:
 	LDA #$01
 	STA $0205
 
-	LDA #$00
+	LDA paddle_palette
 	STA $0206
 
 	;; don't think this is necessary because X doesn't change
@@ -1765,7 +1781,7 @@ COMMON_END:
 	LDA #$01
 	STA $0209
 
-	LDA #$00
+	LDA paddle_palette
 	STA $020A
 
 	;; don't think this is necessary because X doesn't change
@@ -1779,7 +1795,7 @@ COMMON_END:
 	LDA #$01
 	STA $020D
 
-	LDA #$00
+	LDA paddle_palette + 1
 	STA $020E
 
 	;; don't think this is necessary because X doesn't change
@@ -1795,7 +1811,7 @@ COMMON_END:
 	LDA #$01
 	STA $0211
 
-	LDA #$00
+	LDA paddle_palette + 1
 	STA $0212
 
 	;; don't think this is necessary because X doesn't change
@@ -1942,8 +1958,11 @@ background:
 	.byte $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
 
 attributes:  ; 8 x 8 = 64 bytes
-	.byte %01010000, %01010000, %01010000, %01010000
-	.byte %01010000, %01010000, %01010000, %01010000
+	;; .byte %01010000, %01010000, %01010000, %01010000
+	;; .byte %01010000, %01010000, %01010000, %01010000
+
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
 
 	.byte %00000000, %00000000, %00000000, %00000000
 	.byte %00000000, %00000000, %00000000, %00000000
@@ -1964,8 +1983,11 @@ attributes:  ; 8 x 8 = 64 bytes
 	.byte %00000000, %00000000, %00000000, %00000000
 
 	;; bottom row attributes
-	.byte %00000101, %00000101, %00000101, %00000101
-	.byte %00000101, %00000101, %00000101, %00000101
+	.byte %00000000, %00000000, %00000000, %00000000
+	.byte %00000000, %00000000, %00000000, %00000000
+
+	;; .byte %00000101, %00000101, %00000101, %00000101
+	;; .byte %00000101, %00000101, %00000101, %00000101
 
 horiz_angle_table:
 	.word paddle_angle_four_down
