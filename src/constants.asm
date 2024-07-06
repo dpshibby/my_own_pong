@@ -49,7 +49,7 @@
 	.charmap 'Z', $29
 	.charmap '<', $30
 	.charmap '>', $31
-	.charmap ' ', $01
+	.charmap ' ', $03
 	.charmap '0', $40
 	.charmap '1', $41
 	.charmap '2', $42
@@ -73,36 +73,96 @@ string_table:
 	
 	;; option submenu entries
 	.word win_score
-	.word sample
 
 	;; entries for end of game/replay
 	.word p1_win
 	.word p2_win
 	.word play_again
 	.word quit
+
+	;; label: text associated with the entry
+	;; l_MSB, l_LSB: nametable addr to write the label
+	;; type: is the menu entry going to modify a number, text, or sprite?
+	;; t_x, t_y: x and y to display the sprite
+	;; NB: if it not a sprite type then these will be nametable addr of num
+	;; t_addr_x, t_addr_y: address of sprite data so it can be set according to t_x/t_y
+	;; var_1, var_2: variables that can be modified with this menu entry
+	;; NB: if the menu type is number then var_1 and var_2 will be what is displayed
+	.macro menu_entry label, l_MSB, l_LSB, type, t_x, t_y, t_addr_x, t_addr_y, var, var_min, var_max
+	.addr label
+	.byte l_MSB, l_LSB, type, t_x, t_y
+	.addr t_addr_x, t_addr_y
+	.addr var
+	.byte var_min, var_max
+	.endmacro
+
+	SIZEOF_MENU_ENTRY = 15
+	NUM_MENU_ENTRIES  = 3
+	menu_label         := menu_entries + 0
+	menu_label_MSB     := menu_entries + 2
+	menu_label_LSB     := menu_entries + 3
+	menu_type          := menu_entries + 4
+	menu_tx            := menu_entries + 5
+	menu_ty            := menu_entries + 6
+	menu_addr_x        := menu_entries + 7
+	menu_addr_y        := menu_entries + 9
+	menu_var           := menu_entries + 11
+	menu_var_min       := menu_entries + 13
+	menu_var_max       := menu_entries + 14
+
+	.macro plaintext_entry entry_name, msb, lsb
+	.addr entry_name
+	.byte msb, lsb
+	.endmacro
+
+	SIZEOF_PLAINTEXT_ENTRY = 4
+	pt_entry_name    := menu_entries + 0
+	pt_entry_MSB     := menu_entries + 2
+	pt_entry_LSB     := menu_entries + 3
+
+	.macro string_entry str
+	.byte .strlen(str), str, $00
+	.endmacro
+
+plaintext:
+	plaintext_entry my_own, MYOWN_MSB, MYOWN_LSB
+	.byte PONG_TOP_SIZE
+	.addr pong_top
+	.byte PONG_TOP_MSB, PONG_TOP_LSB
+	.byte PONG_BOT_SIZE
+	.addr pong_bot
+	.byte PONG_BOT_MSB, PONG_BOT_LSB
+	plaintext_entry press_start, PS_MSB, PS_LSB
+
 my_own:
-	.byte MYOWN_SIZE, MYOWN_MSB, MYOWN_LSB, "MY OWN", 0
+	string_entry "MY OWN"
+
 pong_top:
-	.byte PONG_TOP_SIZE, PONG_TOP_MSB, PONG_TOP_LSB
-	.byte $60, $61, $62, $63, $64, $65, $66, $67, 0
+	.byte $08, $60, $61, $62, $63, $64, $65, $66, $67, 0
 pong_bot:
-	.byte PONG_BOT_SIZE, PONG_BOT_MSB, PONG_BOT_LSB
-	.byte $70, $71, $72, $73, $74, $75, $76, $77, 0
+	.byte $08, $70, $71, $72, $73, $74, $75, $76, $77, 0
 press_start:
-	.byte PS_SIZE, PS_MSB, PS_LSB, "PRESS  START", 0
+	string_entry "PRESS  START"
 play:
-	.byte PLAY_SIZE, PLAY_MSB, PLAY_LSB, "PLAY", 0
+	string_entry "PLAY"
 options:
-	.byte OPT_SIZE, OPT_MSB, OPT_LSB, "OPTIONS", 0
-win_score:
-	.byte WIN_SCORE_SIZE, WIN_SCORE_MSB, WIN_SCORE_LSB, "SCORE TO WIN", 0
-sample:
-	.byte SAMPLE_SIZE, SAMPLE_MSB, SAMPLE_LSB, "SAMPLE", 0
+	string_entry "OPTIONS"
+win_score_str:
+	string_entry "SCORE TO WIN"
+p1_look:
+	string_entry "P1 LOOK"
+p2_look:
+	string_entry "P2 LOOK"
+sprite_select:
+	string_entry "  "
 p1_win:
-	.byte WINNER_SIZE, WINNER_MSB, WINNER_LSB, "P1  WINS", 0
+	string_entry "P1  WINS"
 p2_win:
-	.byte WINNER_SIZE, WINNER_MSB, WINNER_LSB, "P2  WINS", 0
+	string_entry "P2  WINS"
 play_again:
-	.byte PLAY_AG_SIZE, PLAY_AG_MSB, PLAY_AG_LSB, "PLAY AGAIN", 0
+	string_entry "PLAY AGAIN"
 quit:
-	.byte QUIT_SIZE, QUIT_MSB, QUIT_LSB, "QUIT", 0
+	string_entry "QUIT"
+
+
+
